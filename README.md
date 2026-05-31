@@ -2,21 +2,25 @@
 
 Rust-first implementation scaffold for the SwarmAI architecture writeups.
 
-## What It Can Do Today
+## Current Scope
 
-Hivemind is a Rust-first local development stack for Swarm-backed AI packages, runners, registries, marketplace flows, validation, receipts, and audit trails. It can scaffold and validate packages, publish them to local or Bee-style storage, rebuild searchable registries, route execution across browser/local/remote runner contracts, produce signed receipts and reports, and expose the whole flow through a CLI, JSON API, OpenAI-compatible endpoints, and a Rust/WASM dashboard.
+Hivemind is a Rust-first implementation of a Swarm-backed AI package network. The current codebase is a local-first protocol workbench: it turns the architecture into executable contracts for packages, storage, registry discovery, runner routing, marketplace records, validation reports, receipts, and audit trails.
 
-The current implementation is a working MVP and compatibility harness, not a production decentralized AI network yet. It is useful now for local prototyping, integration tests, protocol demos, package publishing flows, runner and marketplace simulations, and contract validation.
+Today, Hivemind can scaffold and validate `swarm-ai.json` packages, publish them to local or Bee-style storage, rebuild searchable registries, route requests across browser, local, and remote runner contracts, produce signed receipts and reports, and expose those flows through a CLI, JSON API, OpenAI-compatible endpoints, and a Rust/WASM dashboard.
 
-## Ways People Can Use It
+It is not yet a production decentralized AI network. Its value right now is that teams can run the end-to-end lifecycle locally, verify protocol behavior, test integrations, and harden the component boundaries before real economic settlement, live decentralized feeds, production runner isolation, and governance are introduced.
 
-- Package authors can create, validate, certify, sign, publish, and feed-update `swarm-ai.json` packages.
-- App developers can search the registry, inspect package details, route requests, execute locally, or use `/v1/chat/completions` and `/v1/embeddings`.
-- Runner operators can model browser, local, or remote capacity, publish offers, quote work, and emit receipts.
-- Registry and mirror operators can rebuild public indexes, emit shards, verify manifests, and compare mirrors.
-- Validators can run compatibility checks, benchmark packages, sign reports, and contribute reputation data.
-- Marketplace participants can list packages, shortlist runners, authorize payment records, settle receipts, and resolve disputes.
-- Protocol implementers can use the schemas, SDK facade, CLI, tests, and crate boundaries as executable contract examples.
+## Practical Scenarios
+
+- A model publisher can create an embedding or chat package, validate its manifest and artifacts, sign a publication record, publish the package to development storage, and update feed pointers so clients can resolve the latest release.
+- An application developer can search the local registry for a package, inspect its trust evidence, route an execution request, run it through the local development runner, or use the OpenAI-compatible `/v1/chat/completions` and `/v1/embeddings` endpoints while keeping the underlying SwarmAI contracts visible.
+- A registry or mirror operator can rebuild a public index from packages, publications, feeds, validation reports, and benchmark results, then emit shard files and verify shard manifests before trusting another catalog.
+- A runner operator can model browser, local, or remote GPU capacity, publish service offers, quote work, execute requests through the runner contract, and attach signed receipts that downstream settlement or dispute flows can inspect.
+- A validator can run compatibility checks or benchmark suites, sign the resulting reports, store them through the same provider abstraction as packages, and contribute evidence that the registry can summarize into reputation data.
+- A marketplace integrator can exercise listing, shortlisting, quote, payment authorization, settlement, dispute, refund, and rejection records without pretending the local implementation is already a live payment system.
+- A protocol implementer can use the Rust crates, JSON schemas, SDK facade, CLI commands, and tests as concrete compatibility references for an independent implementation.
+
+The intended direction is to preserve these working contracts while replacing local simulations with production-grade Swarm/Bee publication, real runner backends, wallet-bound identity and payment proofs, stronger sandboxing, and decentralized operating processes.
 
 The repository is a single Cargo workspace with separate crates for the major R&D components:
 
