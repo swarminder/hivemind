@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "swarm-ai.registry.shard.v1",
+  "shardId": "kind-tool",
+  "shardKind": "kind",
+  "shardKey": "tool",
+  "generatedAt": "2026-05-22T18:01:08Z",
+  "entryCount": 1,
+  "entries": [
+    {
+      "schemaVersion": "swarm-ai.registry.entry.v1",
+      "packageId": "hivemind/bad-permission-shell",
+      "name": "Bad Permission Shell",
+      "kind": "tool",
+      "latestVersion": "0.1.0",
+      "stableVersion": "0.1.0",
+      "packageRefs": [
+        {
+          "version": "0.1.0",
+          "packageRef": "bzz://local-d8f46438a215900992986975cbd0e3fb",
+          "manifestHash": "d8f46438a215900992986975cbd0e3fbe1619e4591c9563a61c4b12a7615ef5b",
+          "publishedAt": "2026-05-22T18:01:08Z"
+        }
+      ],
+      "publisher": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "displayName": "Hivemind Labs",
+        "publisherProfileRef": null
+      },
+      "capabilities": [
+        "classification"
+      ],
+      "targets": [
+        "local-mock"
+      ],
+      "engines": [
+        "rust-mock"
+      ],
+      "license": {
+        "type": "open",
+        "name": "Apache-2.0",
+        "url": null
+      },
+      "trust": {
+        "signatureVerified": false,
+        "validatorScore": 0.8,
+        "downloadCountApprox": 0,
+        "curated": false
+      },
+      "permissions": [
+        {
+          "name": "local.shell",
+          "required": true
+        }
+      ],
+      "policySummary": {
+        "riskLevel": "blocked",
+        "decision": "deny",
+        "permissionCount": 1,
+        "codeExecution": "unsandboxed-required",
+        "reasons": [
+          "Permission local.shell is denied by default"
+        ]
+      },
+      "benchmarkScores": [],
+      "approxArtifactBytes": 128
+    }
+  ]
+}

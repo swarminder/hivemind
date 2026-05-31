@@ -1,0 +1,5 @@
+{
+  "engine": "rust-mock",
+  "task": "chat",
+  "description": "Deterministic local development chat package"
+}

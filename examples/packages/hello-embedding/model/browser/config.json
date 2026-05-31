@@ -1,0 +1,6 @@
+{
+  "architecture": "mock-embedding",
+  "dimensions": 8,
+  "description": "Tiny fixture used by the Rust development runner."
+}
+

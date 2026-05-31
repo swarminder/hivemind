@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "swarm-ai.package.v1",
+  "packageId": "hivemind/hello-chat",
+  "kind": "model",
+  "name": "Hello Chat",
+  "version": "0.1.0",
+  "publisher": {
+    "address": "0x0000000000000000000000000000000000000000",
+    "displayName": "Hivemind Labs"
+  },
+  "capabilities": ["chat"],
+  "artifactGroups": [
+    {
+      "id": "local-rust-chat-mock",
+      "target": "local-mock",
+      "engine": "rust-mock",
+      "format": "json",
+      "paths": ["model/config.json"],
+      "totalBytes": 256,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "minimum": {
+        "memoryMB": 128,
+        "webgpu": false
+      }
+    },
+    {
+      "id": "remote-vllm-chat-mock",
+      "target": "cuda-vllm",
+      "engine": "vllm",
+      "format": "json",
+      "paths": ["model/config.json"],
+      "totalBytes": 256,
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "minimum": {
+        "memoryMB": 128,
+        "webgpu": false
+      }
+    }
+  ],
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "text": { "type": "string" },
+      "messages": {
+        "type": "array",
+        "items": { "type": "object" }
+      }
+    }
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "message": {
+        "type": "object",
+        "properties": {
+          "role": { "type": "string" },
+          "content": { "type": "string" }
+        }
+      }
+    }
+  },
+  "permissions": [],
+  "license": {
+    "type": "open",
+    "name": "Apache-2.0"
+  }
+}

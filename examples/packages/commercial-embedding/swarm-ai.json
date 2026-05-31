@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "swarm-ai.package.v1",
+  "packageId": "hivemind/commercial-embedding",
+  "kind": "model",
+  "name": "Commercial Embedding",
+  "version": "0.1.0",
+  "publisher": {
+    "address": "0x0000000000000000000000000000000000000000",
+    "displayName": "Hivemind Labs"
+  },
+  "capabilities": ["embedding"],
+  "artifactGroups": [
+    {
+      "id": "local-rust-mock",
+      "target": "local-mock",
+      "engine": "rust-mock",
+      "format": "json",
+      "paths": [
+        "model/config.json",
+        "model/tokenizer.json"
+      ],
+      "totalBytes": 512,
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "minimum": {
+        "memoryMB": 128,
+        "webgpu": false
+      }
+    }
+  ],
+  "inputSchema": {
+    "type": "object",
+    "required": ["text"],
+    "properties": {
+      "text": {
+        "type": "string"
+      }
+    }
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "embedding": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "permissions": [],
+  "license": {
+    "type": "commercial",
+    "name": "Commercial Dev License",
+    "url": "local://terms/hivemind/commercial-embedding"
+  }
+}

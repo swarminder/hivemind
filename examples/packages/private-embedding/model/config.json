@@ -1,0 +1,5 @@
+{
+  "model": "private-embedding",
+  "dimensions": 4,
+  "note": "private dev fixture"
+}

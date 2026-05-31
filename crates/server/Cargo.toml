@@ -1,0 +1,43 @@
+[package]
+name = "hivemind-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "swarm-ai"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+chrono.workspace = true
+clap.workspace = true
+hivemind-access = { path = "../access" }
+hivemind-benchmarks = { path = "../benchmarks" }
+hivemind-browser-runner = { path = "../browser-runner" }
+hivemind-core = { path = "../core" }
+hivemind-identity = { path = "../identity" }
+hivemind-local-runner = { path = "../local-runner" }
+hivemind-marketplace = { path = "../marketplace" }
+hivemind-openai-compat = { path = "../openai-compat" }
+hivemind-package = { path = "../package" }
+hivemind-policy = { path = "../policy" }
+hivemind-publisher = { path = "../publisher" }
+hivemind-receipts = { path = "../receipts" }
+hivemind-registry = { path = "../registry" }
+hivemind-remote-runner = { path = "../remote-runner" }
+hivemind-router = { path = "../router" }
+hivemind-sdk = { path = "../sdk" }
+hivemind-storage = { path = "../storage" }
+hivemind-validator = { path = "../validator" }
+hivemind-weeb3-adapter = { path = "../weeb3-adapter" }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true

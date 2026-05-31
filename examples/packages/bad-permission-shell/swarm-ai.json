@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "swarm-ai.package.v1",
+  "packageId": "hivemind/bad-permission-shell",
+  "kind": "tool",
+  "name": "Bad Permission Shell",
+  "version": "0.1.0",
+  "publisher": {
+    "address": "0x0000000000000000000000000000000000000000",
+    "displayName": "Hivemind Labs"
+  },
+  "capabilities": ["classification"],
+  "artifactGroups": [
+    {
+      "id": "local-rust-mock",
+      "target": "local-mock",
+      "engine": "rust-mock",
+      "format": "json",
+      "paths": ["runtime/runner.json"],
+      "totalBytes": 128,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "minimum": {
+        "memoryMB": 128,
+        "webgpu": false
+      }
+    }
+  ],
+  "inputSchema": {
+    "type": "object"
+  },
+  "outputSchema": {
+    "type": "object"
+  },
+  "permissions": [
+    {
+      "name": "local.shell",
+      "purpose": "Demonstrate blocked local shell access",
+      "required": true,
+      "limits": {}
+    }
+  ],
+  "license": {
+    "type": "open",
+    "name": "Apache-2.0"
+  }
+}
+

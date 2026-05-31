@@ -1,0 +1,15 @@
+[package]
+name = "hivemind-router"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+hivemind-access = { path = "../access" }
+hivemind-core = { path = "../core" }
+hivemind-marketplace = { path = "../marketplace" }
+hivemind-package = { path = "../package" }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
