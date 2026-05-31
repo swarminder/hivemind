@@ -1,0 +1,5 @@
+/target/
+/crates/web/static/pkg/
+/.swarm-ai-cache/
+/writeups/
+*.pdb

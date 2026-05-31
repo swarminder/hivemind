@@ -1,0 +1,187 @@
+{
+  "schemaVersion": "swarm-ai.registry.shard.v1",
+  "shardId": "target-local-mock",
+  "shardKind": "target",
+  "shardKey": "local-mock",
+  "generatedAt": "2026-05-22T18:01:08Z",
+  "entryCount": 3,
+  "entries": [
+    {
+      "schemaVersion": "swarm-ai.registry.entry.v1",
+      "packageId": "hivemind/bad-permission-shell",
+      "name": "Bad Permission Shell",
+      "kind": "tool",
+      "latestVersion": "0.1.0",
+      "stableVersion": "0.1.0",
+      "packageRefs": [
+        {
+          "version": "0.1.0",
+          "packageRef": "bzz://local-d8f46438a215900992986975cbd0e3fb",
+          "manifestHash": "d8f46438a215900992986975cbd0e3fbe1619e4591c9563a61c4b12a7615ef5b",
+          "publishedAt": "2026-05-22T18:01:08Z"
+        }
+      ],
+      "publisher": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "displayName": "Hivemind Labs",
+        "publisherProfileRef": null
+      },
+      "capabilities": [
+        "classification"
+      ],
+      "targets": [
+        "local-mock"
+      ],
+      "engines": [
+        "rust-mock"
+      ],
+      "license": {
+        "type": "open",
+        "name": "Apache-2.0",
+        "url": null
+      },
+      "trust": {
+        "signatureVerified": false,
+        "validatorScore": 0.8,
+        "downloadCountApprox": 0,
+        "curated": false
+      },
+      "permissions": [
+        {
+          "name": "local.shell",
+          "required": true
+        }
+      ],
+      "policySummary": {
+        "riskLevel": "blocked",
+        "decision": "deny",
+        "permissionCount": 1,
+        "codeExecution": "unsandboxed-required",
+        "reasons": [
+          "Permission local.shell is denied by default"
+        ]
+      },
+      "benchmarkScores": [],
+      "approxArtifactBytes": 128
+    },
+    {
+      "schemaVersion": "swarm-ai.registry.entry.v1",
+      "packageId": "hivemind/commercial-embedding",
+      "name": "Commercial Embedding",
+      "kind": "model",
+      "latestVersion": "0.1.0",
+      "stableVersion": "0.1.0",
+      "packageRefs": [
+        {
+          "version": "0.1.0",
+          "packageRef": "bzz://local-dir-7e3a6652d44062811c86af59e687f0adb5e79ea303de0b52ee930e17804a1acc",
+          "manifestHash": "b1876426c3d77a513f1f06de8bbfcdab7e6e427b8c9d51b0126f1f398b753a78",
+          "publishedAt": "2026-05-22T14:00:10Z"
+        }
+      ],
+      "publisher": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "displayName": "Hivemind Labs",
+        "publisherProfileRef": null
+      },
+      "capabilities": [
+        "embedding"
+      ],
+      "targets": [
+        "local-mock"
+      ],
+      "engines": [
+        "rust-mock"
+      ],
+      "license": {
+        "type": "commercial",
+        "name": "Commercial Dev License",
+        "url": "local://terms/hivemind/commercial-embedding"
+      },
+      "trust": {
+        "signatureVerified": false,
+        "validatorScore": 0.8,
+        "downloadCountApprox": 0,
+        "curated": false
+      },
+      "permissions": [],
+      "policySummary": {
+        "riskLevel": "low",
+        "decision": "allow",
+        "permissionCount": 0,
+        "codeExecution": "none",
+        "reasons": [
+          "Package requests no elevated permissions"
+        ]
+      },
+      "benchmarkScores": [],
+      "approxArtifactBytes": 512
+    },
+    {
+      "schemaVersion": "swarm-ai.registry.entry.v1",
+      "packageId": "hivemind/hello-embedding",
+      "name": "Hello Embedding",
+      "kind": "model",
+      "latestVersion": "0.1.0",
+      "stableVersion": "0.1.0",
+      "packageRefs": [
+        {
+          "version": "0.1.0",
+          "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+          "manifestHash": "894b2e310f166a464e90ca85d03c9ebfe2804f04710695963b09531c37bd04f4",
+          "publishedAt": "2026-05-22T17:43:59Z"
+        }
+      ],
+      "publisher": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "displayName": "Hivemind Labs",
+        "publisherProfileRef": null
+      },
+      "capabilities": [
+        "embedding",
+        "classification"
+      ],
+      "targets": [
+        "browser-wasm",
+        "local-mock"
+      ],
+      "engines": [
+        "rust-mock",
+        "wasm-mock"
+      ],
+      "license": {
+        "type": "open",
+        "name": "Apache-2.0",
+        "url": null
+      },
+      "trust": {
+        "signatureVerified": true,
+        "validatorScore": 1.0,
+        "downloadCountApprox": 0,
+        "curated": false
+      },
+      "permissions": [],
+      "policySummary": {
+        "riskLevel": "low",
+        "decision": "allow",
+        "permissionCount": 0,
+        "codeExecution": "none",
+        "reasons": [
+          "Package requests no elevated permissions"
+        ]
+      },
+      "benchmarkScores": [
+        {
+          "benchmarkId": "commons/embedding-basic-v1",
+          "benchmarkVersion": "1.0.0",
+          "evaluationId": "evaluation-a5bb3caefc568e054fc8414b",
+          "quality": 1.0,
+          "latency": 1.0,
+          "overall": 1.0,
+          "createdAt": "2026-05-22T14:59:35Z"
+        }
+      ],
+      "approxArtifactBytes": 1024
+    }
+  ]
+}

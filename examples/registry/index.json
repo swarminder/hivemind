@@ -1,0 +1,644 @@
+{
+  "schemaVersion": "swarm-ai.registry.snapshot.v1",
+  "entries": [
+    {
+      "schemaVersion": "swarm-ai.registry.entry.v1",
+      "packageId": "hivemind/bad-permission-shell",
+      "name": "Bad Permission Shell",
+      "kind": "tool",
+      "latestVersion": "0.1.0",
+      "stableVersion": "0.1.0",
+      "packageRefs": [
+        {
+          "version": "0.1.0",
+          "packageRef": "bzz://local-d8f46438a215900992986975cbd0e3fb",
+          "manifestHash": "d8f46438a215900992986975cbd0e3fbe1619e4591c9563a61c4b12a7615ef5b",
+          "publishedAt": "2026-05-22T20:28:43Z"
+        }
+      ],
+      "publisher": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "displayName": "Hivemind Labs",
+        "publisherProfileRef": null
+      },
+      "capabilities": [
+        "classification"
+      ],
+      "targets": [
+        "local-mock"
+      ],
+      "engines": [
+        "rust-mock"
+      ],
+      "license": {
+        "type": "open",
+        "name": "Apache-2.0",
+        "url": null
+      },
+      "trust": {
+        "signatureVerified": false,
+        "validatorScore": 0.8,
+        "downloadCountApprox": 0,
+        "curated": false
+      },
+      "permissions": [
+        {
+          "name": "local.shell",
+          "required": true
+        }
+      ],
+      "policySummary": {
+        "riskLevel": "blocked",
+        "decision": "deny",
+        "permissionCount": 1,
+        "codeExecution": "unsandboxed-required",
+        "reasons": [
+          "Permission local.shell is denied by default"
+        ]
+      },
+      "benchmarkScores": [],
+      "approxArtifactBytes": 128
+    },
+    {
+      "schemaVersion": "swarm-ai.registry.entry.v1",
+      "packageId": "hivemind/commercial-embedding",
+      "name": "Commercial Embedding",
+      "kind": "model",
+      "latestVersion": "0.1.0",
+      "stableVersion": "0.1.0",
+      "packageRefs": [
+        {
+          "version": "0.1.0",
+          "packageRef": "bzz://local-dir-7e3a6652d44062811c86af59e687f0adb5e79ea303de0b52ee930e17804a1acc",
+          "manifestHash": "b1876426c3d77a513f1f06de8bbfcdab7e6e427b8c9d51b0126f1f398b753a78",
+          "publishedAt": "2026-05-22T14:00:10Z"
+        }
+      ],
+      "publisher": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "displayName": "Hivemind Labs",
+        "publisherProfileRef": null
+      },
+      "capabilities": [
+        "embedding"
+      ],
+      "targets": [
+        "local-mock"
+      ],
+      "engines": [
+        "rust-mock"
+      ],
+      "license": {
+        "type": "commercial",
+        "name": "Commercial Dev License",
+        "url": "local://terms/hivemind/commercial-embedding"
+      },
+      "trust": {
+        "signatureVerified": false,
+        "validatorScore": 0.8,
+        "downloadCountApprox": 0,
+        "curated": false
+      },
+      "permissions": [],
+      "policySummary": {
+        "riskLevel": "low",
+        "decision": "allow",
+        "permissionCount": 0,
+        "codeExecution": "none",
+        "reasons": [
+          "Package requests no elevated permissions"
+        ]
+      },
+      "benchmarkScores": [],
+      "approxArtifactBytes": 512
+    },
+    {
+      "schemaVersion": "swarm-ai.registry.entry.v1",
+      "packageId": "hivemind/hello-embedding",
+      "name": "Hello Embedding",
+      "kind": "model",
+      "latestVersion": "0.1.0",
+      "stableVersion": "0.1.0",
+      "packageRefs": [
+        {
+          "version": "0.1.0",
+          "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+          "manifestHash": "894b2e310f166a464e90ca85d03c9ebfe2804f04710695963b09531c37bd04f4",
+          "publishedAt": "2026-05-22T17:43:59Z"
+        }
+      ],
+      "publisher": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "displayName": "Hivemind Labs",
+        "publisherProfileRef": null
+      },
+      "capabilities": [
+        "embedding",
+        "classification"
+      ],
+      "targets": [
+        "browser-wasm",
+        "local-mock"
+      ],
+      "engines": [
+        "rust-mock",
+        "wasm-mock"
+      ],
+      "license": {
+        "type": "open",
+        "name": "Apache-2.0",
+        "url": null
+      },
+      "trust": {
+        "signatureVerified": true,
+        "validatorScore": 1.0,
+        "downloadCountApprox": 0,
+        "curated": false
+      },
+      "permissions": [],
+      "policySummary": {
+        "riskLevel": "low",
+        "decision": "allow",
+        "permissionCount": 0,
+        "codeExecution": "none",
+        "reasons": [
+          "Package requests no elevated permissions"
+        ]
+      },
+      "benchmarkScores": [
+        {
+          "benchmarkId": "commons/embedding-basic-v1",
+          "benchmarkVersion": "1.0.0",
+          "evaluationId": "evaluation-f8f271fd1d996843436dd9d6",
+          "quality": 1.0,
+          "latency": 1.0,
+          "overall": 1.0,
+          "createdAt": "2026-05-22T20:28:43Z"
+        }
+      ],
+      "approxArtifactBytes": 1024
+    }
+  ],
+  "publicationRecords": [
+    {
+      "schemaVersion": "swarm-ai.publication.v1",
+      "packageId": "hivemind/commercial-embedding",
+      "version": "0.1.0",
+      "packageRef": "bzz://local-dir-7e3a6652d44062811c86af59e687f0adb5e79ea303de0b52ee930e17804a1acc",
+      "manifestHash": "b1876426c3d77a513f1f06de8bbfcdab7e6e427b8c9d51b0126f1f398b753a78",
+      "publisher": "0x0000000000000000000000000000000000000000",
+      "signature": "unsigned-dev-publication",
+      "publishedAt": "2026-05-22T14:00:10Z",
+      "channelsUpdated": [
+        {
+          "channel": "latest",
+          "feedRef": "local://feed/hivemind/commercial-embedding/latest"
+        }
+      ],
+      "storage": {
+        "pinned": false,
+        "redundancyLevel": 0,
+        "postageBatchId": null
+      }
+    },
+    {
+      "schemaVersion": "swarm-ai.publication.v1",
+      "packageId": "hivemind/hello-embedding",
+      "version": "0.1.0",
+      "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+      "manifestHash": "894b2e310f166a464e90ca85d03c9ebfe2804f04710695963b09531c37bd04f4",
+      "publisher": "0x0000000000000000000000000000000000000000",
+      "signature": "dev-signature-v1:publication:ca5c2c38ee2c180def06f937b1a1a41ea78c1f61234a12944f174cc29f882f21",
+      "publishedAt": "2026-05-22T17:43:59Z",
+      "channelsUpdated": [
+        {
+          "channel": "latest",
+          "feedRef": "local://feed/hivemind/hello-embedding/latest"
+        },
+        {
+          "channel": "stable",
+          "feedRef": "local://feed/hivemind/hello-embedding/stable"
+        }
+      ],
+      "storage": {
+        "pinned": false,
+        "redundancyLevel": 0,
+        "postageBatchId": null
+      }
+    }
+  ],
+  "publicationStatuses": [
+    {
+      "schemaVersion": "swarm-ai.registry.publication-status.v1",
+      "packageId": "hivemind/commercial-embedding",
+      "version": "0.1.0",
+      "packageRef": "bzz://local-dir-7e3a6652d44062811c86af59e687f0adb5e79ea303de0b52ee930e17804a1acc",
+      "valid": false,
+      "verification": {
+        "schemaVersion": "swarm-ai.publication-verification.v1",
+        "valid": false,
+        "issues": [
+          {
+            "path": "$.signature",
+            "message": "Publication signature does not match canonical dev signature"
+          }
+        ],
+        "warnings": [],
+        "expectedSignature": "dev-signature-v1:publication:0bc61f7e451fb31acfca7688073f15260fd9bc2b38a42d6593f8a626453cfd9b",
+        "verifiedAt": "2026-05-22T20:28:43Z"
+      }
+    },
+    {
+      "schemaVersion": "swarm-ai.registry.publication-status.v1",
+      "packageId": "hivemind/hello-embedding",
+      "version": "0.1.0",
+      "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+      "valid": true,
+      "verification": {
+        "schemaVersion": "swarm-ai.publication-verification.v1",
+        "valid": true,
+        "issues": [],
+        "warnings": [
+          {
+            "path": "$.signature",
+            "message": "Signature is deterministic local-dev signing, not production wallet signing"
+          }
+        ],
+        "expectedSignature": "dev-signature-v1:publication:ca5c2c38ee2c180def06f937b1a1a41ea78c1f61234a12944f174cc29f882f21",
+        "verifiedAt": "2026-05-22T20:28:43Z"
+      }
+    }
+  ],
+  "feedStatuses": [
+    {
+      "schemaVersion": "swarm-ai.registry.feed-status.v1",
+      "packageId": "hivemind/hello-embedding",
+      "channel": "latest",
+      "feedRef": "local://feed/hivemind/hello-embedding/latest",
+      "valid": true,
+      "resolution": {
+        "schemaVersion": "swarm-ai.feed-resolution.v1",
+        "valid": true,
+        "feedRef": "local://feed/hivemind/hello-embedding/latest",
+        "pointer": {
+          "schemaVersion": "swarm-ai.feed-pointer.v1",
+          "packageId": "hivemind/hello-embedding",
+          "channel": "latest",
+          "version": "0.1.0",
+          "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+          "manifestHash": "894b2e310f166a464e90ca85d03c9ebfe2804f04710695963b09531c37bd04f4",
+          "publisher": "0x0000000000000000000000000000000000000000",
+          "publicationSignature": "dev-signature-v1:publication:ca5c2c38ee2c180def06f937b1a1a41ea78c1f61234a12944f174cc29f882f21",
+          "publicationRecord": {
+            "schemaVersion": "swarm-ai.publication.v1",
+            "packageId": "hivemind/hello-embedding",
+            "version": "0.1.0",
+            "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+            "manifestHash": "894b2e310f166a464e90ca85d03c9ebfe2804f04710695963b09531c37bd04f4",
+            "publisher": "0x0000000000000000000000000000000000000000",
+            "signature": "dev-signature-v1:publication:ca5c2c38ee2c180def06f937b1a1a41ea78c1f61234a12944f174cc29f882f21",
+            "publishedAt": "2026-05-22T17:43:59Z",
+            "channelsUpdated": [
+              {
+                "channel": "latest",
+                "feedRef": "local://feed/hivemind/hello-embedding/latest"
+              },
+              {
+                "channel": "stable",
+                "feedRef": "local://feed/hivemind/hello-embedding/stable"
+              }
+            ],
+            "storage": {
+              "pinned": false,
+              "redundancyLevel": 0,
+              "postageBatchId": null
+            }
+          },
+          "updatedAt": "2026-05-22T17:44:28Z",
+          "signature": "dev-signature-v1:feed-pointer:03cb93ce9670113dfa814d79ed39fab02686e92b0373c719ca46ec2fe49a92fd"
+        },
+        "feedVerification": {
+          "schemaVersion": "swarm-ai.feed-verification.v1",
+          "valid": true,
+          "issues": [],
+          "warnings": [
+            {
+              "path": "$.signature",
+              "message": "Signature is deterministic local-dev signing, not production wallet signing"
+            }
+          ],
+          "expectedSignature": "dev-signature-v1:feed-pointer:03cb93ce9670113dfa814d79ed39fab02686e92b0373c719ca46ec2fe49a92fd",
+          "verifiedAt": "2026-05-22T20:28:43Z"
+        },
+        "verification": {
+          "schemaVersion": "swarm-ai.publication-verification.v1",
+          "valid": true,
+          "issues": [],
+          "warnings": [
+            {
+              "path": "$.signature",
+              "message": "Signature is deterministic local-dev signing, not production wallet signing"
+            }
+          ],
+          "expectedSignature": "dev-signature-v1:publication:ca5c2c38ee2c180def06f937b1a1a41ea78c1f61234a12944f174cc29f882f21",
+          "verifiedAt": "2026-05-22T20:28:43Z"
+        }
+      }
+    },
+    {
+      "schemaVersion": "swarm-ai.registry.feed-status.v1",
+      "packageId": "hivemind/hello-embedding",
+      "channel": "stable",
+      "feedRef": "local://feed/hivemind/hello-embedding/stable",
+      "valid": true,
+      "resolution": {
+        "schemaVersion": "swarm-ai.feed-resolution.v1",
+        "valid": true,
+        "feedRef": "local://feed/hivemind/hello-embedding/stable",
+        "pointer": {
+          "schemaVersion": "swarm-ai.feed-pointer.v1",
+          "packageId": "hivemind/hello-embedding",
+          "channel": "stable",
+          "version": "0.1.0",
+          "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+          "manifestHash": "894b2e310f166a464e90ca85d03c9ebfe2804f04710695963b09531c37bd04f4",
+          "publisher": "0x0000000000000000000000000000000000000000",
+          "publicationSignature": "dev-signature-v1:publication:ca5c2c38ee2c180def06f937b1a1a41ea78c1f61234a12944f174cc29f882f21",
+          "publicationRecord": {
+            "schemaVersion": "swarm-ai.publication.v1",
+            "packageId": "hivemind/hello-embedding",
+            "version": "0.1.0",
+            "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+            "manifestHash": "894b2e310f166a464e90ca85d03c9ebfe2804f04710695963b09531c37bd04f4",
+            "publisher": "0x0000000000000000000000000000000000000000",
+            "signature": "dev-signature-v1:publication:ca5c2c38ee2c180def06f937b1a1a41ea78c1f61234a12944f174cc29f882f21",
+            "publishedAt": "2026-05-22T17:43:59Z",
+            "channelsUpdated": [
+              {
+                "channel": "latest",
+                "feedRef": "local://feed/hivemind/hello-embedding/latest"
+              },
+              {
+                "channel": "stable",
+                "feedRef": "local://feed/hivemind/hello-embedding/stable"
+              }
+            ],
+            "storage": {
+              "pinned": false,
+              "redundancyLevel": 0,
+              "postageBatchId": null
+            }
+          },
+          "updatedAt": "2026-05-22T17:44:28Z",
+          "signature": "dev-signature-v1:feed-pointer:58e6fbd534a9b350cc2860d9de28cc3970315432769066963883ee6b0494bb2f"
+        },
+        "feedVerification": {
+          "schemaVersion": "swarm-ai.feed-verification.v1",
+          "valid": true,
+          "issues": [],
+          "warnings": [
+            {
+              "path": "$.signature",
+              "message": "Signature is deterministic local-dev signing, not production wallet signing"
+            }
+          ],
+          "expectedSignature": "dev-signature-v1:feed-pointer:58e6fbd534a9b350cc2860d9de28cc3970315432769066963883ee6b0494bb2f",
+          "verifiedAt": "2026-05-22T20:28:43Z"
+        },
+        "verification": {
+          "schemaVersion": "swarm-ai.publication-verification.v1",
+          "valid": true,
+          "issues": [],
+          "warnings": [
+            {
+              "path": "$.signature",
+              "message": "Signature is deterministic local-dev signing, not production wallet signing"
+            }
+          ],
+          "expectedSignature": "dev-signature-v1:publication:ca5c2c38ee2c180def06f937b1a1a41ea78c1f61234a12944f174cc29f882f21",
+          "verifiedAt": "2026-05-22T20:28:43Z"
+        }
+      }
+    }
+  ],
+  "validationReports": [
+    {
+      "schemaVersion": "swarm-ai.validation-report.v1",
+      "reportId": "validation-cd0878fba896b644b7706a73",
+      "validatorId": "local-dev-validator",
+      "runnerId": "local-dev-runner",
+      "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+      "challengeId": "challenge-b6977c9a46fefa4ee9e9299b",
+      "receiptId": "8f02326e3d9c8c20092fe5caeaa8add13a6b7a869e2ef432c5757b26380164c4",
+      "scores": {
+        "quality": 1.0,
+        "latency": 1.0,
+        "costEfficiency": 1.0,
+        "policyCompliance": 1.0,
+        "overall": 1.0
+      },
+      "evidenceRefs": [],
+      "createdAt": "2026-05-22T14:46:19Z",
+      "signature": "unsigned-dev-validation"
+    },
+    {
+      "schemaVersion": "swarm-ai.validation-report.v1",
+      "reportId": "validation-f21cc0b8a7b3669528f2c86f",
+      "validatorId": "local-dev-validator",
+      "runnerId": "local-dev-runner",
+      "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+      "challengeId": "challenge-1345ae835065933d65bbbe1c",
+      "receiptId": "efbefb1a4a42bd8456fcb7feff7e74e4133025497a3042b256129df10dcdcc67",
+      "scores": {
+        "quality": 1.0,
+        "latency": 1.0,
+        "costEfficiency": 1.0,
+        "policyCompliance": 1.0,
+        "overall": 1.0
+      },
+      "evidenceRefs": [],
+      "createdAt": "2026-05-22T20:22:17Z",
+      "signature": "dev-signature-v1:validation-report:9e08ea30778c3e9f9d8c48a896d657a411bec98c5f80d778969ebac98b837f1a"
+    },
+    {
+      "schemaVersion": "swarm-ai.validation-report.v1",
+      "reportId": "validation-6b30e7e76bb504c9764e0c67",
+      "validatorId": "local-dev-validator",
+      "runnerId": "local-dev-runner",
+      "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+      "challengeId": "challenge-1499b9ec77e506608b7f7b4a",
+      "receiptId": "df597ea0249b144702c093a31e0dc5e26b3a2db29a9930998a2749f266eb3c60",
+      "scores": {
+        "quality": 1.0,
+        "latency": 1.0,
+        "costEfficiency": 1.0,
+        "policyCompliance": 1.0,
+        "overall": 1.0
+      },
+      "evidenceRefs": [],
+      "createdAt": "2026-05-22T20:28:43Z",
+      "signature": "dev-signature-v1:validation-report:283cdfe33745ce0b5626b38b46768c5ea5668d96e41ed7b3712352375cb201be"
+    }
+  ],
+  "evaluationResults": [
+    {
+      "schemaVersion": "swarm-ai.evaluation-result.v1",
+      "evaluationId": "evaluation-a5bb3caefc568e054fc8414b",
+      "benchmarkId": "commons/embedding-basic-v1",
+      "benchmarkVersion": "1.0.0",
+      "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+      "runnerId": "local-dev-runner",
+      "validatorId": "local-dev-validator",
+      "scores": {
+        "quality": 1.0,
+        "latency": 1.0,
+        "overall": 1.0
+      },
+      "metrics": {
+        "samples": 3,
+        "succeeded": 3,
+        "failed": 0,
+        "totalMs": 3,
+        "averageMs": 1.0
+      },
+      "resultRefs": [],
+      "sampleResults": [
+        {
+          "entryId": "embedding-basic-001",
+          "requestId": "benchmark-request-e6db7f535c331c3650f6e016",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "f7a668fd7807c4bde4c6e4ff80f47ab62d29b350f5a52543a0e4f53b9c801874"
+        },
+        {
+          "entryId": "embedding-basic-002",
+          "requestId": "benchmark-request-df535f3456f559c9f54ce38a",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "e0c80a06902a2a0aa2b40852f64067d2dcf36a867f5f62a1e83c9d637de17b9f"
+        },
+        {
+          "entryId": "embedding-basic-003",
+          "requestId": "benchmark-request-eb58c88af6b2ab1dcee6e647",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "123ff5a3a6500a97db24970e5300918b9190674a90d4d3ba12b88bce2c007e44"
+        }
+      ],
+      "createdAt": "2026-05-22T14:59:35Z",
+      "signature": "unsigned-dev-evaluation"
+    },
+    {
+      "schemaVersion": "swarm-ai.evaluation-result.v1",
+      "evaluationId": "evaluation-25132f0ff65ccd879585f51d",
+      "benchmarkId": "commons/embedding-basic-v1",
+      "benchmarkVersion": "1.0.0",
+      "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+      "runnerId": "local-dev-runner",
+      "validatorId": "local-dev-validator",
+      "scores": {
+        "quality": 1.0,
+        "latency": 1.0,
+        "overall": 1.0
+      },
+      "metrics": {
+        "samples": 3,
+        "succeeded": 3,
+        "failed": 0,
+        "totalMs": 3,
+        "averageMs": 1.0
+      },
+      "resultRefs": [],
+      "sampleResults": [
+        {
+          "entryId": "embedding-basic-001",
+          "requestId": "benchmark-request-e6db7f535c331c3650f6e016",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "13a0f3b2a6fec4f498a9d902424746ada7c26568f08c01c83e378b62c99bb81a"
+        },
+        {
+          "entryId": "embedding-basic-002",
+          "requestId": "benchmark-request-df535f3456f559c9f54ce38a",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "db9a975a6adacced405d4f7c25995e88b88acd6a2fefc3bc64a57dcaab20ff09"
+        },
+        {
+          "entryId": "embedding-basic-003",
+          "requestId": "benchmark-request-eb58c88af6b2ab1dcee6e647",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "df09e49c46d11e70da443a1e9ef0fbc9d56fc600556b307be865c0c80b660c12"
+        }
+      ],
+      "createdAt": "2026-05-22T20:22:17Z",
+      "signature": "dev-signature-v1:evaluation-result:22985d171afbf6e0162c18549b60f47e9da40f2f3f757ba1dc25c775bd03ad23"
+    },
+    {
+      "schemaVersion": "swarm-ai.evaluation-result.v1",
+      "evaluationId": "evaluation-f8f271fd1d996843436dd9d6",
+      "benchmarkId": "commons/embedding-basic-v1",
+      "benchmarkVersion": "1.0.0",
+      "packageRef": "bzz://local-dir-4fafe49f8795f7fb61b1d09f1aefd522fb67440704d15a9ca93e750dfe6a842f",
+      "runnerId": "local-dev-runner",
+      "validatorId": "local-dev-validator",
+      "scores": {
+        "quality": 1.0,
+        "latency": 1.0,
+        "overall": 1.0
+      },
+      "metrics": {
+        "samples": 3,
+        "succeeded": 3,
+        "failed": 0,
+        "totalMs": 3,
+        "averageMs": 1.0
+      },
+      "resultRefs": [],
+      "sampleResults": [
+        {
+          "entryId": "embedding-basic-001",
+          "requestId": "benchmark-request-e6db7f535c331c3650f6e016",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "a99d36d292cdf05687c48f154ec4b5cae01b0d3b43921e8f2fdd56614df96e43"
+        },
+        {
+          "entryId": "embedding-basic-002",
+          "requestId": "benchmark-request-df535f3456f559c9f54ce38a",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "fc3879064e9c42b6bec8f18e62ac049cfa909f7b4dea79f68692164a32407784"
+        },
+        {
+          "entryId": "embedding-basic-003",
+          "requestId": "benchmark-request-eb58c88af6b2ab1dcee6e647",
+          "status": "succeeded",
+          "quality": 1.0,
+          "latency": 1.0,
+          "totalMs": 1,
+          "receiptId": "c55a8b79849c15dfcbbd9eadfaa742542cb399e3925d7e841ec4f174607bfc1f"
+        }
+      ],
+      "createdAt": "2026-05-22T20:28:43Z",
+      "signature": "dev-signature-v1:evaluation-result:52ebdcdb7940a5fb463720af1c7ff4aaecca831d1e6152d0f383c2463e9bfa02"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "swarm-ai.package.v1",
+  "packageId": "hivemind/hello-embedding",
+  "kind": "model",
+  "name": "Hello Embedding",
+  "version": "0.1.0",
+  "publisher": {
+    "address": "0x0000000000000000000000000000000000000000",
+    "displayName": "Hivemind Labs"
+  },
+  "capabilities": ["embedding", "classification"],
+  "artifactGroups": [
+    {
+      "id": "browser-wasm-small",
+      "target": "browser-wasm",
+      "engine": "wasm-mock",
+      "format": "json",
+      "paths": ["model/browser/config.json", "model/browser/tokenizer.json"],
+      "totalBytes": 512,
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "minimum": {
+        "memoryMB": 128,
+        "webgpu": false
+      }
+    },
+    {
+      "id": "local-rust-mock",
+      "target": "local-mock",
+      "engine": "rust-mock",
+      "format": "json",
+      "paths": ["model/browser/config.json", "model/browser/tokenizer.json"],
+      "totalBytes": 512,
+      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "minimum": {
+        "memoryMB": 128,
+        "webgpu": false
+      }
+    }
+  ],
+  "inputSchema": {
+    "type": "object",
+    "required": ["text"],
+    "properties": {
+      "text": { "type": "string" }
+    }
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "embedding": {
+        "type": "array",
+        "items": { "type": "number" }
+      }
+    }
+  },
+  "permissions": [],
+  "license": {
+    "type": "open",
+    "name": "Apache-2.0"
+  }
+}
+

@@ -1,0 +1,19 @@
+{
+  "name": "hivemind-web",
+  "type": "module",
+  "collaborators": [
+    "Hivemind contributors"
+  ],
+  "version": "0.1.0",
+  "license": "MIT OR Apache-2.0",
+  "files": [
+    "hivemind_web_bg.wasm",
+    "hivemind_web.js",
+    "hivemind_web.d.ts"
+  ],
+  "main": "hivemind_web.js",
+  "types": "hivemind_web.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

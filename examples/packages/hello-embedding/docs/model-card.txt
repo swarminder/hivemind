@@ -1,0 +1,2 @@
+Hello Embedding is a fixture package for local compatibility testing. It does not contain real model weights.
+

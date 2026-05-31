@@ -1,0 +1,19 @@
+[package]
+name = "hivemind-registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+hivemind-access = { path = "../access" }
+hivemind-benchmarks = { path = "../benchmarks" }
+hivemind-core = { path = "../core" }
+hivemind-package = { path = "../package" }
+hivemind-publisher = { path = "../publisher" }
+hivemind-validator = { path = "../validator" }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true

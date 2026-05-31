@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "swarm-ai.benchmark-package.v1",
+  "benchmarkId": "commons/embedding-basic-v1",
+  "name": "Basic Embedding Shape Benchmark",
+  "task": "embedding",
+  "version": "1.0.0",
+  "datasetRefs": ["local://datasets/embedding-basic-v1"],
+  "scoringRules": [
+    {
+      "id": "embedding-shape",
+      "method": "embedding-shape",
+      "parameters": { "minDimensions": 4 }
+    },
+    {
+      "id": "latency",
+      "method": "latency",
+      "parameters": { "deadlineMs": 30000 }
+    }
+  ],
+  "visibility": "public",
+  "license": { "type": "open", "name": "Apache-2.0" }
+}

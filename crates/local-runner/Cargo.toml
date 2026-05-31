@@ -1,0 +1,20 @@
+[package]
+name = "hivemind-local-runner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+hivemind-access = { path = "../access" }
+hivemind-core = { path = "../core" }
+hivemind-package = { path = "../package" }
+hivemind-policy = { path = "../policy" }
+hivemind-receipts = { path = "../receipts" }
+hivemind-storage = { path = "../storage" }
+schemars.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+serde.workspace = true

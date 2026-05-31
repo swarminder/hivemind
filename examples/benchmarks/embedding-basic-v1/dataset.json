@@ -1,0 +1,29 @@
+[
+  {
+    "schemaVersion": "swarm-ai.dataset-entry.v1",
+    "entryId": "embedding-basic-001",
+    "task": "embedding",
+    "input": { "text": "hello benchmark commons" },
+    "expectedOutput": { "minDimensions": 4 },
+    "weight": 1.0,
+    "tags": ["smoke", "short-text"]
+  },
+  {
+    "schemaVersion": "swarm-ai.dataset-entry.v1",
+    "entryId": "embedding-basic-002",
+    "task": "embedding",
+    "input": { "text": "decentralized package registry" },
+    "expectedOutput": { "minDimensions": 4 },
+    "weight": 1.0,
+    "tags": ["smoke", "domain-text"]
+  },
+  {
+    "schemaVersion": "swarm-ai.dataset-entry.v1",
+    "entryId": "embedding-basic-003",
+    "task": "embedding",
+    "input": { "text": "rust wasm local runner" },
+    "expectedOutput": { "minDimensions": 4 },
+    "weight": 1.0,
+    "tags": ["smoke", "technical-text"]
+  }
+]

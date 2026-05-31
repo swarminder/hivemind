@@ -1,0 +1,5 @@
+{
+  "model": "commercial-embedding-dev",
+  "dimensions": 8,
+  "normalization": "unit"
+}
