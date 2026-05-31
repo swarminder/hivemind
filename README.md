@@ -18,18 +18,6 @@ The current implementation is a working MVP and compatibility harness, not a pro
 - Marketplace participants can list packages, shortlist runners, authorize payment records, settle receipts, and resolve disputes.
 - Protocol implementers can use the schemas, SDK facade, CLI, tests, and crate boundaries as executable contract examples.
 
-## Haxe Commit And Pages Helper
-
-The copied Haxe helper is the release gate for commits:
-
-```powershell
-haxe -main Enter --interp
-```
-
-It runs the Hivemind Rust/WASM checks, builds `crates/web` with `wasm-pack`, and only after a successful build replaces `docs/` with the generated static dashboard from `crates/web/static`. It then follows the same branch flow as `weeb-3-secure`: create `feature-<counter>`, commit there, push that branch to `origin`, checkout `main`, merge the feature branch, and push `main`. That keeps GitHub Pages output generated, while this README carries the human project overview.
-
-Git identity, remotes, credential username, and authentication are local repository setup, not Haxe script behavior.
-
 The repository is a single Cargo workspace with separate crates for the major R&D components:
 
 - `hivemind-core`: shared SwarmAI contract types, canonical JSON hashing, and common validators.

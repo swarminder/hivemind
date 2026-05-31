@@ -56,7 +56,7 @@ class Code_One {
       return;
     }
 
-    if (!run_ok("git", ["commit", "-m", "Commit number " + mist + " (" + dome + ")"])) {
+    if (!run_ok("git", ["commit", "-m", "Commit number " + mist])) {
       trace("Skipping GitHub login and push because git commit failed.");
       return;
     }
