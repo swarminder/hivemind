@@ -104,7 +104,7 @@ dependencies = [
  "bytes",
  "form_urlencoded",
  "futures-util",
- "http 1.4.0",
+ "http 1.4.1",
  "http-body",
  "http-body-util",
  "hyper",
@@ -135,7 +135,7 @@ checksum = "08c78f31d7b1291f7ee735c1c6780ccde7785daae9a9206026862dab7d8792d1"
 dependencies = [
  "bytes",
  "futures-core",
- "http 1.4.0",
+ "http 1.4.1",
  "http-body",
  "http-body-util",
  "mime",
@@ -169,9 +169,9 @@ dependencies = [
 
 [[package]]
 name = "bitflags"
-version = "2.11.1"
+version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
+checksum = "84d7ced0ae9557296835c32bf1b1e02b44c746701f898460fb000d7eaa84f00a"
 
 [[package]]
 name = "block-buffer"
@@ -190,9 +190,9 @@ checksum = "cfa8873f51c92e232f9bac4065cddef41b714152812bfc5f7672ba16d6ef8cd9"
 
 [[package]]
 name = "bumpalo"
-version = "3.20.2"
+version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
+checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "bytes"
@@ -202,9 +202,9 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "cc"
-version = "1.2.62"
+version = "1.2.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1dce859f0832a7d088c4f1119888ab94ef4b5d6795d1ce05afb7fe159d79f98"
+checksum = "556e016178bb5662a08681bbe0f00f8e17631781a4dfc8c45e466e4b185ec27f"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -224,9 +224,9 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
-version = "0.4.44"
+version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
+checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
  "num-traits",
@@ -370,9 +370,9 @@ dependencies = [
 
 [[package]]
 name = "displaydoc"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97369cbbc041bc366949bc74d34658d6cda5621039731c6310521892a3a20ae0"
+checksum = "1ac70aa55017e108007fbaf5aa0f54b021c98f92ff8af59d42eda9da96e3dd4f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -808,7 +808,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "gloo-utils 0.2.0",
- "http 1.4.0",
+ "http 1.4.1",
  "js-sys",
  "pin-project",
  "serde",
@@ -1010,6 +1010,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hivemind-batch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hivemind-benchmarks"
 version = "0.1.0"
 dependencies = [
@@ -1039,6 +1052,7 @@ dependencies = [
 name = "hivemind-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "hex",
  "schemars",
  "semver",
@@ -1046,6 +1060,46 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hivemind-evals"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hivemind-fine-tune"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hivemind-governance"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "semver",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1065,6 +1119,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hivemind-jobs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hivemind-local-runner"
 version = "0.1.0"
 dependencies = [
@@ -1080,6 +1146,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tokio",
 ]
 
 [[package]]
@@ -1097,10 +1164,80 @@ dependencies = [
 ]
 
 [[package]]
+name = "hivemind-media"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hivemind-miner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "hivemind-marketplace",
+ "hivemind-remote-runner",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hivemind-moderation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hivemind-observability"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-governance",
+ "hivemind-jobs",
+ "hivemind-marketplace",
+ "hivemind-miner",
+ "hivemind-package",
+ "hivemind-receipts",
+ "hivemind-registry",
+ "hivemind-router",
+ "hivemind-storage",
+ "hivemind-streams",
+ "hivemind-validator",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hivemind-openai-compat"
 version = "0.1.0"
 dependencies = [
+ "hivemind-batch",
  "hivemind-core",
+ "hivemind-evals",
+ "hivemind-fine-tune",
+ "hivemind-media",
+ "hivemind-realtime",
+ "hivemind-vector",
  "schemars",
  "serde",
  "serde_json",
@@ -1111,6 +1248,7 @@ name = "hivemind-package"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "hex",
  "hivemind-core",
  "hivemind-storage",
@@ -1124,7 +1262,19 @@ dependencies = [
 name = "hivemind-policy"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "hivemind-core",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hivemind-provider-compat"
+version = "0.1.0"
+dependencies = [
+ "hivemind-core",
+ "hivemind-realtime",
  "schemars",
  "serde",
  "serde_json",
@@ -1140,6 +1290,19 @@ dependencies = [
  "hivemind-identity",
  "hivemind-package",
  "hivemind-storage",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hivemind-realtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
  "schemars",
  "serde",
  "serde_json",
@@ -1169,6 +1332,8 @@ dependencies = [
  "hivemind-access",
  "hivemind-benchmarks",
  "hivemind-core",
+ "hivemind-governance",
+ "hivemind-marketplace",
  "hivemind-package",
  "hivemind-publisher",
  "hivemind-validator",
@@ -1191,12 +1356,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "hivemind-research"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hivemind-router"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "chrono",
  "hivemind-access",
  "hivemind-core",
  "hivemind-marketplace",
+ "hivemind-miner",
  "hivemind-package",
  "schemars",
  "serde",
@@ -1211,21 +1392,32 @@ dependencies = [
  "chrono",
  "hex",
  "hivemind-access",
+ "hivemind-batch",
  "hivemind-benchmarks",
  "hivemind-browser-runner",
  "hivemind-core",
+ "hivemind-evals",
+ "hivemind-fine-tune",
+ "hivemind-identity",
  "hivemind-local-runner",
  "hivemind-marketplace",
+ "hivemind-media",
+ "hivemind-moderation",
+ "hivemind-openai-compat",
  "hivemind-package",
  "hivemind-policy",
  "hivemind-publisher",
+ "hivemind-realtime",
  "hivemind-receipts",
  "hivemind-registry",
  "hivemind-remote-runner",
+ "hivemind-research",
  "hivemind-router",
  "hivemind-storage",
  "hivemind-validator",
+ "hivemind-vector",
  "hivemind-weeb3-adapter",
+ "hivemind-workflow",
  "schemars",
  "serde",
  "serde_json",
@@ -1242,24 +1434,39 @@ dependencies = [
  "chrono",
  "clap",
  "hivemind-access",
+ "hivemind-batch",
  "hivemind-benchmarks",
  "hivemind-browser-runner",
  "hivemind-core",
+ "hivemind-evals",
+ "hivemind-fine-tune",
+ "hivemind-governance",
  "hivemind-identity",
+ "hivemind-jobs",
  "hivemind-local-runner",
  "hivemind-marketplace",
+ "hivemind-media",
+ "hivemind-miner",
+ "hivemind-moderation",
+ "hivemind-observability",
  "hivemind-openai-compat",
  "hivemind-package",
  "hivemind-policy",
+ "hivemind-provider-compat",
  "hivemind-publisher",
+ "hivemind-realtime",
  "hivemind-receipts",
  "hivemind-registry",
  "hivemind-remote-runner",
+ "hivemind-research",
  "hivemind-router",
  "hivemind-sdk",
  "hivemind-storage",
+ "hivemind-streams",
  "hivemind-validator",
+ "hivemind-vector",
  "hivemind-weeb3-adapter",
+ "hivemind-workflow",
  "schemars",
  "serde",
  "serde_json",
@@ -1286,6 +1493,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hivemind-streams"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-jobs",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hivemind-validator"
 version = "0.1.0"
 dependencies = [
@@ -1300,6 +1520,19 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "hivemind-vector"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1329,6 +1562,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hivemind-workflow"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hivemind-core",
+ "hivemind-identity",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "http"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1341,9 +1587,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "1.4.0"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3ba2a386d7f85a81f119ad7498ebe444d2e22c2af0b86b069416ace48b3311a"
+checksum = "8be7462df143984c4598a256ef469b251d7d7f9e271135073e78fc535414f3d0"
 dependencies = [
  "bytes",
  "itoa",
@@ -1356,7 +1602,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
 dependencies = [
  "bytes",
- "http 1.4.0",
+ "http 1.4.1",
 ]
 
 [[package]]
@@ -1367,7 +1613,7 @@ checksum = "b021d93e26becf5dc7e1b75b1bed1fd93124b374ceb73f43d4d4eafec896a64a"
 dependencies = [
  "bytes",
  "futures-core",
- "http 1.4.0",
+ "http 1.4.1",
  "http-body",
  "pin-project-lite",
 ]
@@ -1392,15 +1638,15 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hyper"
-version = "1.9.0"
+version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6299f016b246a94207e63da54dbe807655bf9e00044f73ded42c3ac5305fbcca"
+checksum = "55281c53a1894c864990125767da440a4e630446785086f52523b20033b74498"
 dependencies = [
  "atomic-waker",
  "bytes",
  "futures-channel",
  "futures-core",
- "http 1.4.0",
+ "http 1.4.1",
  "http-body",
  "httparse",
  "httpdate",
@@ -1417,7 +1663,7 @@ version = "0.27.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33ca68d021ef39cf6463ab54c1d0f5daf03377b70561305bb89a8f83aab66e0f"
 dependencies = [
- "http 1.4.0",
+ "http 1.4.1",
  "hyper",
  "hyper-util",
  "rustls",
@@ -1437,7 +1683,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
- "http 1.4.0",
+ "http 1.4.1",
  "http-body",
  "hyper",
  "ipnet",
@@ -1635,9 +1881,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "js-sys"
-version = "0.3.98"
+version = "0.3.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67df7112613f8bfd9150013a0314e196f4800d3201ae742489d999db2f979f08"
+checksum = "142bc4740e452c1e57ade0cbc129f139c9093e354346f0872ef985f4f5cf5f11"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -1677,9 +1923,9 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "log"
-version = "0.4.29"
+version = "0.4.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+checksum = "953f07c43838f8e6f9758cab68bf5bed85465e7587ebe0b823f1bcd81978ad3a"
 
 [[package]]
 name = "lru-slab"
@@ -1704,9 +1950,9 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "memchr"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
+checksum = "6b947ae49db0d222b1dbc6b113ce7248a3fc3a6ca21b696717bfc000ba4484d8"
 
 [[package]]
 name = "mime"
@@ -1726,9 +1972,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50b7e5b27aa02a74bac8c3f23f448f8d87ff11f92d3aac1a6ed369ee08cc56c1"
+checksum = "02bd0af71c67b473010cbbc60715ee815645a4dc942899111f494b4b737d6fda"
 dependencies = [
  "libc",
  "wasi",
@@ -2058,7 +2304,7 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "http 1.4.0",
+ "http 1.4.1",
  "http-body",
  "http-body-util",
  "hyper",
@@ -2329,9 +2575,9 @@ dependencies = [
 
 [[package]]
 name = "shlex"
-version = "1.3.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
+checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "signal-hook-registry"
@@ -2366,9 +2612,9 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "socket2"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
+checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
@@ -2632,7 +2878,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
- "http 1.4.0",
+ "http 1.4.1",
  "http-body",
  "http-body-util",
  "http-range-header",
@@ -2732,9 +2978,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "typenum"
-version = "1.20.0"
+version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40ce102ab67701b8526c123c1bab5cbe42d7040ccfd0f64af1a385808d2f43de"
+checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "unicase"
@@ -2786,9 +3032,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.23.1"
+version = "1.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
+checksum = "d258b83ceec21034727ecee8c382cfa6c3e133699b0742c64571814fb420c9f7"
 dependencies = [
  "getrandom 0.4.2",
  "js-sys",
@@ -2843,9 +3089,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49ace1d07c165b0864824eee619580c4689389afa9dc9ed3a4c75040d82e6790"
+checksum = "3ed04576f974d2b2fba0f38c51dbc5518011e38c36bf1143164be765528fd409"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -2856,9 +3102,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.71"
+version = "0.4.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96492d0d3ffba25305a7dc88720d250b1401d7edca02cc3bcd50633b424673b8"
+checksum = "9473dbd2991ae90b6291c3c32c30c6187ac49aa32f9905d1cce280ec1e110b0f"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -2866,9 +3112,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e68e6f4afd367a562002c05637acb8578ff2dea1943df76afb9e83d177c8578"
+checksum = "916151b09da36bd82f6615cbf3a419e2f0ba23a03c6160e8e92eb6bd4aa1dec6"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -2876,9 +3122,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d95a9ec35c64b2a7cb35d3fead40c4238d0940c86d107136999567a4703259f2"
+checksum = "299047362ccbfce148b67ab7e73349f77748e00c8296f9542adfad2ad82c5c5e"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -2889,9 +3135,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4e0100b01e9f0d03189a92b96772a1fb998639d981193d7dbab487302513441"
+checksum = "9a929b2c61f11ba3e9bc35b50c1f25cb38e0e892c0c231ae2b8cf78d5dad4437"
 dependencies = [
  "unicode-ident",
 ]
@@ -2932,9 +3178,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.98"
+version = "0.3.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b572dff8bcf38bad0fa19729c89bb5748b2b9b1d8be70cf90df697e3a8f32aa"
+checksum = "6d621441cfc37b84979402712047321980c178f299193a3589d05b99e8763436"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -3335,9 +3581,9 @@ dependencies = [
 
 [[package]]
 name = "yoke"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abe8c5fda708d9ca3df187cae8bfb9ceda00dd96231bed36e445a1a48e66f9ca"
+checksum = "709fe23a0424b6a435d82152b1bd3fdfb0833487d5fa90d05d42762a9891fef5"
 dependencies = [
  "stable_deref_trait",
  "yoke-derive",
@@ -3358,18 +3604,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.48"
+version = "0.8.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eed437bf9d6692032087e337407a86f04cd8d6a16a37199ed57949d415bd68e9"
+checksum = "3b065d4f0e55f82fae73202e189638116a87c55ab6b8e6c2721e13dd9d854ad1"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.48"
+version = "0.8.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e3cd084b1788766f53af483dd21f93881ff30d7320490ec3ef7526d203bad4"
+checksum = "0b631b19d36a892ab55420c92dbc83ccd79274f25be714855d3074aa71cab639"
 dependencies = [
  "proc-macro2",
  "quote",

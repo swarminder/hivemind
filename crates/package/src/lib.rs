@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{SecondsFormat, Utc};
 use hivemind_core::{
     ArtifactGroup, ArtifactMinimum, LicenseInfo, LicenseType, PackageKind, PackageManifestV1,
     Publisher, ValidationIssue, ValidationReport, canonicalize_json, hash_canonical_json,
@@ -11,6 +12,12 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+pub const PACKAGE_VALIDATION_AUDIT_RECORD_SCHEMA_VERSION: &str =
+    "hivemind.package_validation_audit_record.v1";
+pub const PACKAGE_VALIDATION_AUDIT_STORE_SUMMARY_SCHEMA_VERSION: &str =
+    "hivemind.package_validation_audit_store_summary.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -59,6 +66,98 @@ pub struct LocalPackage {
     pub manifest: PackageManifestV1,
     pub manifest_hash: String,
     pub package_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum PackageValidationSourceKindV1 {
+    LocalDirectory,
+    StorageReference,
+    InlineManifest,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PackageValidationAuditRecordV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "validationId")]
+    pub validation_id: String,
+    #[serde(rename = "sourceKind")]
+    pub source_kind: PackageValidationSourceKindV1,
+    pub source: String,
+    #[serde(
+        rename = "manifestHash",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub manifest_hash: Option<String>,
+    #[serde(rename = "packageId", default, skip_serializing_if = "Option::is_none")]
+    pub package_id: Option<String>,
+    #[serde(
+        rename = "packageVersion",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub package_version: Option<String>,
+    pub valid: bool,
+    #[serde(rename = "issueCount")]
+    pub issue_count: usize,
+    #[serde(rename = "warningCount")]
+    pub warning_count: usize,
+    #[serde(
+        rename = "manifestParseElapsedMs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub manifest_parse_elapsed_ms: Option<u64>,
+    #[serde(rename = "validationElapsedMs")]
+    pub validation_elapsed_ms: u64,
+    #[serde(rename = "totalElapsedMs")]
+    pub total_elapsed_ms: u64,
+    #[serde(rename = "recordedAt")]
+    pub recorded_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PackageValidationAuditStoreSummaryV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    pub root: String,
+    #[serde(rename = "validationCount")]
+    pub validation_count: usize,
+    #[serde(rename = "validCount")]
+    pub valid_count: usize,
+    #[serde(rename = "invalidCount")]
+    pub invalid_count: usize,
+    #[serde(rename = "manifestParseSampleCount")]
+    pub manifest_parse_sample_count: usize,
+    #[serde(
+        rename = "averageManifestParseElapsedMs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub average_manifest_parse_elapsed_ms: Option<f64>,
+    #[serde(
+        rename = "maxManifestParseElapsedMs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_manifest_parse_elapsed_ms: Option<u64>,
+    #[serde(rename = "validationSampleCount")]
+    pub validation_sample_count: usize,
+    #[serde(
+        rename = "averageValidationElapsedMs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub average_validation_elapsed_ms: Option<f64>,
+    #[serde(
+        rename = "maxValidationElapsedMs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_validation_elapsed_ms: Option<u64>,
+    pub validations: Vec<PackageValidationAuditRecordV1>,
 }
 
 pub fn read_manifest_value(root: &Path) -> Result<Value> {
@@ -141,6 +240,182 @@ pub fn validate_package_ref(
     }
 
     Ok(report)
+}
+
+pub fn validate_package_dir_with_audit(
+    root: &Path,
+) -> Result<(ValidationReport, PackageValidationAuditRecordV1)> {
+    let total_start = Instant::now();
+    let parse_start = Instant::now();
+    let manifest_value = read_manifest_value(root)?;
+    let parse_elapsed_ms = elapsed_ms(parse_start);
+    let manifest_hash = manifest_hash_from_value(&manifest_value);
+    let validation_start = Instant::now();
+    let mut report = validate_package_manifest_value(&manifest_value);
+    if let Some(manifest) = report.manifest.clone() {
+        append_path_validation(root, &manifest, &mut report);
+    }
+    let validation_elapsed_ms = elapsed_ms(validation_start);
+    let record = package_validation_audit_record(
+        &report,
+        PackageValidationSourceKindV1::LocalDirectory,
+        root.display().to_string(),
+        Some(manifest_hash),
+        Some(parse_elapsed_ms),
+        validation_elapsed_ms,
+        elapsed_ms(total_start),
+    );
+    Ok((report, record))
+}
+
+pub fn validate_package_ref_with_audit(
+    package_ref: &str,
+    storage: &impl StorageProvider,
+) -> Result<(ValidationReport, PackageValidationAuditRecordV1)> {
+    let total_start = Instant::now();
+    let response = storage
+        .download_file(package_ref, "swarm-ai.json")
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let parse_start = Instant::now();
+    let manifest_value: Value = serde_json::from_slice(&response.bytes)
+        .with_context(|| format!("{package_ref}/swarm-ai.json is not valid JSON"))?;
+    let parse_elapsed_ms = elapsed_ms(parse_start);
+    let manifest_hash = manifest_hash_from_value(&manifest_value);
+    let validation_start = Instant::now();
+    let mut report = validate_package_manifest_value(&manifest_value);
+
+    if let Some(manifest) = report.manifest.clone() {
+        for (group_index, group) in manifest.artifact_groups.iter().enumerate() {
+            for (path_index, path) in group.paths.iter().enumerate() {
+                if !is_relative_package_path(path) {
+                    continue;
+                }
+                if let Err(error) = storage.download_file(package_ref, path) {
+                    report.issues.push(ValidationIssue {
+                        path: format!("$.artifactGroups[{group_index}].paths[{path_index}]"),
+                        message: format!("Referenced file is not retrievable: {path}: {error}"),
+                    });
+                }
+            }
+        }
+        report.valid = report.issues.is_empty();
+    }
+    let validation_elapsed_ms = elapsed_ms(validation_start);
+    let record = package_validation_audit_record(
+        &report,
+        PackageValidationSourceKindV1::StorageReference,
+        package_ref.to_string(),
+        Some(manifest_hash),
+        Some(parse_elapsed_ms),
+        validation_elapsed_ms,
+        elapsed_ms(total_start),
+    );
+    Ok((report, record))
+}
+
+pub fn validate_manifest_value_with_audit(
+    value: &Value,
+    source: impl Into<String>,
+) -> (ValidationReport, PackageValidationAuditRecordV1) {
+    let total_start = Instant::now();
+    let validation_start = Instant::now();
+    let report = validate_package_manifest_value(value);
+    let validation_elapsed_ms = elapsed_ms(validation_start);
+    let record = package_validation_audit_record(
+        &report,
+        PackageValidationSourceKindV1::InlineManifest,
+        source.into(),
+        Some(manifest_hash_from_value(value)),
+        None,
+        validation_elapsed_ms,
+        elapsed_ms(total_start),
+    );
+    (report, record)
+}
+
+pub fn write_package_validation_audit_record(
+    audit_dir: &Path,
+    record: &PackageValidationAuditRecordV1,
+) -> Result<PathBuf> {
+    fs::create_dir_all(audit_dir).with_context(|| {
+        format!(
+            "failed to create package validation audit dir {}",
+            audit_dir.display()
+        )
+    })?;
+    let path = audit_dir.join(format!(
+        "{}.json",
+        safe_file_component(&record.validation_id)
+    ));
+    fs::write(&path, serde_json::to_vec_pretty(record)?).with_context(|| {
+        format!(
+            "failed to write package validation audit record {}",
+            path.display()
+        )
+    })?;
+    Ok(path)
+}
+
+pub fn read_package_validation_audit_record(path: &Path) -> Result<PackageValidationAuditRecordV1> {
+    let bytes = fs::read(path).with_context(|| {
+        format!(
+            "failed to read package validation audit record {}",
+            path.display()
+        )
+    })?;
+    serde_json::from_slice(&bytes).with_context(|| {
+        format!(
+            "failed to parse package validation audit record {}",
+            path.display()
+        )
+    })
+}
+
+pub fn list_package_validation_audit(
+    audit_dir: &Path,
+) -> Result<PackageValidationAuditStoreSummaryV1> {
+    let mut validations = Vec::new();
+    if audit_dir.exists() {
+        for entry in fs::read_dir(audit_dir)
+            .with_context(|| format!("failed to read {}", audit_dir.display()))?
+        {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_file()
+                && path.extension().and_then(|extension| extension.to_str()) == Some("json")
+            {
+                validations.push(read_package_validation_audit_record(&path)?);
+            }
+        }
+    }
+    validations.sort_by(|left, right| {
+        left.recorded_at
+            .cmp(&right.recorded_at)
+            .then(left.validation_id.cmp(&right.validation_id))
+    });
+    let parse_values = validations
+        .iter()
+        .filter_map(|record| record.manifest_parse_elapsed_ms)
+        .collect::<Vec<_>>();
+    let validation_values = validations
+        .iter()
+        .map(|record| record.validation_elapsed_ms)
+        .collect::<Vec<_>>();
+    let valid_count = validations.iter().filter(|record| record.valid).count();
+    Ok(PackageValidationAuditStoreSummaryV1 {
+        schema_version: PACKAGE_VALIDATION_AUDIT_STORE_SUMMARY_SCHEMA_VERSION.to_string(),
+        root: audit_dir.display().to_string(),
+        validation_count: validations.len(),
+        valid_count,
+        invalid_count: validations.len().saturating_sub(valid_count),
+        manifest_parse_sample_count: parse_values.len(),
+        average_manifest_parse_elapsed_ms: average_u64(&parse_values),
+        max_manifest_parse_elapsed_ms: parse_values.iter().copied().max(),
+        validation_sample_count: validation_values.len(),
+        average_validation_elapsed_ms: average_u64(&validation_values),
+        max_validation_elapsed_ms: validation_values.iter().copied().max(),
+        validations,
+    })
 }
 
 pub fn default_init_options(
@@ -481,6 +756,84 @@ fn display_name_from_package_id(package_id: &str) -> String {
         .join(" ")
 }
 
+fn package_validation_audit_record(
+    report: &ValidationReport,
+    source_kind: PackageValidationSourceKindV1,
+    source: String,
+    manifest_hash: Option<String>,
+    manifest_parse_elapsed_ms: Option<u64>,
+    validation_elapsed_ms: u64,
+    total_elapsed_ms: u64,
+) -> PackageValidationAuditRecordV1 {
+    let mut record = PackageValidationAuditRecordV1 {
+        schema_version: PACKAGE_VALIDATION_AUDIT_RECORD_SCHEMA_VERSION.to_string(),
+        validation_id: String::new(),
+        source_kind,
+        source,
+        manifest_hash,
+        package_id: report
+            .manifest
+            .as_ref()
+            .map(|manifest| manifest.package_id.clone()),
+        package_version: report
+            .manifest
+            .as_ref()
+            .map(|manifest| manifest.version.clone()),
+        valid: report.valid,
+        issue_count: report.issues.len(),
+        warning_count: report.warnings.len(),
+        manifest_parse_elapsed_ms,
+        validation_elapsed_ms,
+        total_elapsed_ms,
+        recorded_at: timestamp(),
+    };
+    record.validation_id = canonical_package_validation_audit_record_id(&record);
+    record
+}
+
+pub fn canonical_package_validation_audit_record_id(
+    record: &PackageValidationAuditRecordV1,
+) -> String {
+    let mut value =
+        serde_json::to_value(record).expect("package validation audit record should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("validationId");
+    }
+    format!("package-validation-{}", &hash_canonical_json(&value)[..24])
+}
+
+fn manifest_hash_from_value(value: &Value) -> String {
+    hash_canonical_json(&canonicalize_json(value))
+}
+
+fn elapsed_ms(start: Instant) -> u64 {
+    start.elapsed().as_millis().try_into().unwrap_or(u64::MAX)
+}
+
+fn timestamp() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
+fn average_u64(values: &[u64]) -> Option<f64> {
+    (!values.is_empty()).then(|| {
+        let total: u64 = values.iter().sum();
+        total as f64 / values.len() as f64
+    })
+}
+
+fn safe_file_component(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -523,6 +876,47 @@ mod tests {
         assert!(second.is_err());
         assert!(forced.validation.valid, "{:?}", forced.validation.issues);
         assert!(root.join("model/config.json").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn package_validation_audit_store_summarizes_manifest_timings() {
+        let root = unique_temp_dir("hivemind-package-validation-audit-test");
+        let audit_dir = root.join("audit");
+        let package_dir = root.join("package");
+        let options =
+            default_init_options("demo/audit-init", None, PackageTemplateKind::EmbeddingModel);
+        init_package_dir(&package_dir, &options).unwrap();
+
+        let (report, mut record) = validate_package_dir_with_audit(&package_dir).unwrap();
+        assert!(report.valid, "{:?}", report.issues);
+        assert!(record.validation_id.starts_with("package-validation-"));
+        assert_eq!(
+            record.source_kind,
+            PackageValidationSourceKindV1::LocalDirectory
+        );
+        assert_eq!(record.package_id.as_deref(), Some("demo/audit-init"));
+        assert!(record.manifest_hash.is_some());
+        record.manifest_parse_elapsed_ms = Some(4);
+        record.validation_elapsed_ms = 6;
+        record.total_elapsed_ms = 10;
+        record.validation_id = canonical_package_validation_audit_record_id(&record);
+
+        let path = write_package_validation_audit_record(&audit_dir, &record).unwrap();
+        let reread = read_package_validation_audit_record(&path).unwrap();
+        assert_eq!(reread.validation_id, record.validation_id);
+
+        let summary = list_package_validation_audit(&audit_dir).unwrap();
+        assert_eq!(summary.validation_count, 1);
+        assert_eq!(summary.valid_count, 1);
+        assert_eq!(summary.invalid_count, 0);
+        assert_eq!(summary.manifest_parse_sample_count, 1);
+        assert_eq!(summary.average_manifest_parse_elapsed_ms, Some(4.0));
+        assert_eq!(summary.max_manifest_parse_elapsed_ms, Some(4));
+        assert_eq!(summary.validation_sample_count, 1);
+        assert_eq!(summary.average_validation_elapsed_ms, Some(6.0));
+        assert_eq!(summary.max_validation_elapsed_ms, Some(6));
 
         let _ = fs::remove_dir_all(root);
     }

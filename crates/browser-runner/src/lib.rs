@@ -4,7 +4,8 @@ use hivemind_core::{
     AccessDecision, ErrorCode, ExecutionMetrics, ExecutionReceiptV1, ExecutionRequestV1,
     ExecutionResponseV1, ExecutionStatus, PackageManifestV1, ReceiptDraft, RunnerDescriptorV1,
     RunnerLimits, RunnerType, SwarmAiErrorV1, canonicalize_json, create_signed_receipt,
-    hash_canonical_json, manifest_supports_capability, runner_supports_capability,
+    evaluate_package_policy, hash_canonical_json, manifest_supports_capability,
+    policy_execution_block_reason, receipt_policy_evidence, runner_supports_capability,
     select_artifact_group,
 };
 use schemars::JsonSchema;
@@ -411,6 +412,40 @@ pub fn execute_prepared_with_route(
 
     let started_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let receipt_route_id = route_id.unwrap_or_else(|| format!("browser-{BROWSER_RUNNER_ID}"));
+    let policy = evaluate_package_policy(
+        manifest,
+        &prepared.package_ref,
+        Some(BROWSER_RUNNER_ID.to_string()),
+    );
+    if let Some(policy_reason) = policy_execution_block_reason(&policy) {
+        return ExecutionResponseV1::failed(
+            request.request_id,
+            SwarmAiErrorV1::new(ErrorCode::AccessDenied, policy_reason)
+                .with_details(json!({ "policy": policy })),
+            ExecutionMetrics::default(),
+        );
+    }
+    let access = evaluate_execution_access_with_revocations(
+        manifest,
+        &prepared.package_ref,
+        &request.request_id,
+        "local-dev",
+        "runner-service",
+        Some(BROWSER_RUNNER_ID),
+        request.access_grant.as_ref(),
+        request.access_revocation_list.as_ref(),
+    );
+    if access.decision != AccessDecision::Granted {
+        return ExecutionResponseV1::failed(
+            request.request_id,
+            SwarmAiErrorV1::new(
+                ErrorCode::AccessDenied,
+                "Package license requires an access grant",
+            )
+            .with_details(json!({ "access": access })),
+            ExecutionMetrics::default(),
+        );
+    }
     let timer = Instant::now();
     let output = match request.task.as_str() {
         "embedding" => json!({
@@ -449,9 +484,12 @@ pub fn execute_prepared_with_route(
             "artifactGroup": prepared.artifact_group,
             "cacheKey": prepared.cache_key,
             "executionLocation": "browser",
+            "policy": policy,
+            "access": access,
         }),
     };
     let finished_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let policy_evidence = receipt_policy_evidence(&policy, finished_at.clone());
     let receipt = create_signed_receipt(ReceiptDraft {
         request: &request,
         response: &response,
@@ -460,7 +498,7 @@ pub fn execute_prepared_with_route(
         manifest_hash: &prepared.manifest_hash,
         runner_id: BROWSER_RUNNER_ID,
         route_id: Some(receipt_route_id),
-        policy: None,
+        policy: Some(policy_evidence),
         started_at: &started_at,
         finished_at: &finished_at,
     });
@@ -659,8 +697,9 @@ mod tests {
     use super::*;
     use hivemind_core::{
         ArtifactGroup, ArtifactMinimum, ExecutionOptions, ExecutionPrivacy, LicenseInfo,
-        LicenseType, PackageKind, Publisher,
+        LicenseType, PackageKind, PermissionRequest, PolicyDecision, Publisher,
     };
+    use serde_json::Value;
 
     #[test]
     fn assesses_browser_wasm_artifact() {
@@ -699,7 +738,124 @@ mod tests {
 
         assert_eq!(response.status, ExecutionStatus::Succeeded);
         assert!(response.output.get("embedding").is_some());
-        assert!(receipt_from_browser_response(&response).is_some());
+        let receipt = receipt_from_browser_response(&response).expect("receipt should be present");
+        assert!(receipt.policy.is_some());
+    }
+
+    #[test]
+    fn blocks_consent_required_permission_without_approval() {
+        let mut manifest = package();
+        manifest.permissions.push(PermissionRequest {
+            name: "network.http".to_string(),
+            purpose: Some("call an external API".to_string()),
+            required: false,
+            limits: json!({ "allowedHosts": ["api.example.com"] }),
+        });
+        let capabilities = default_browser_capabilities();
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-1".to_string(),
+            package_ref: "bzz://pkg".to_string(),
+            package_id: manifest.package_id.clone(),
+            package_version: manifest.version.clone(),
+            preferred_artifact_group: None,
+            task: "embedding".to_string(),
+            input: json!({ "text": "hello browser" }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let response = execute_manifest(&manifest, "bzz://pkg", request, &capabilities);
+
+        assert_eq!(response.status, ExecutionStatus::Failed);
+        assert_eq!(
+            response.error.as_ref().unwrap().code,
+            ErrorCode::AccessDenied
+        );
+        assert_eq!(
+            response
+                .error
+                .as_ref()
+                .unwrap()
+                .details
+                .get("policy")
+                .and_then(|policy| policy.get("decision"))
+                .and_then(Value::as_str),
+            Some("ask-user")
+        );
+    }
+
+    #[test]
+    fn receipt_policy_evidence_matches_browser_runner() {
+        let manifest = package();
+        let capabilities = default_browser_capabilities();
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-1".to_string(),
+            package_ref: "bzz://pkg".to_string(),
+            package_id: manifest.package_id.clone(),
+            package_version: manifest.version.clone(),
+            preferred_artifact_group: None,
+            task: "embedding".to_string(),
+            input: json!({ "text": "hello browser" }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let response = execute_manifest(&manifest, "bzz://pkg", request, &capabilities);
+        let receipt = receipt_from_browser_response(&response).expect("receipt should be present");
+        let policy = receipt.policy.expect("policy evidence should be embedded");
+
+        assert_eq!(
+            policy.policy_decision.runner_id.as_deref(),
+            Some(BROWSER_RUNNER_ID)
+        );
+        assert_eq!(policy.policy_decision.decision, PolicyDecision::Allow);
+    }
+
+    #[test]
+    fn prepared_execution_enforces_access_grants() {
+        let mut manifest = package();
+        manifest.license.license_type = LicenseType::Commercial;
+        manifest.license.name = Some("Commercial".to_string());
+        let capabilities = default_browser_capabilities();
+        let manifest_hash = manifest_hash(&manifest);
+        let plan = prepare_plan(
+            &manifest,
+            "bzz://pkg",
+            manifest_hash.clone(),
+            &capabilities,
+            None,
+        )
+        .unwrap();
+        let prepared = record_prepared_package(&manifest, manifest_hash, &plan);
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-1".to_string(),
+            package_ref: "bzz://pkg".to_string(),
+            package_id: manifest.package_id.clone(),
+            package_version: manifest.version.clone(),
+            preferred_artifact_group: None,
+            task: "embedding".to_string(),
+            input: json!({ "text": "hello browser" }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let response = execute_prepared(request, &manifest, &prepared);
+
+        assert_eq!(response.status, ExecutionStatus::Failed);
+        assert_eq!(
+            response.error.as_ref().unwrap().code,
+            ErrorCode::AccessDenied
+        );
+        assert!(response.error.unwrap().details.get("access").is_some());
     }
 
     fn package() -> PackageManifestV1 {

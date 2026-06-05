@@ -6,9 +6,12 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+anyhow.workspace = true
+chrono.workspace = true
 hivemind-access = { path = "../access" }
 hivemind-core = { path = "../core" }
 hivemind-marketplace = { path = "../marketplace" }
+hivemind-miner = { path = "../miner" }
 hivemind-package = { path = "../package" }
 schemars.workspace = true
 serde.workspace = true

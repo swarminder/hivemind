@@ -1,0 +1,15 @@
+[package]
+name = "hivemind-streams"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+hivemind-core = { path = "../core" }
+hivemind-jobs = { path = "../jobs" }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true

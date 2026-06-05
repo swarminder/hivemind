@@ -39,6 +39,24 @@ pub struct PolicyDecisionV1 {
     pub risk_level: RiskLevel,
 }
 
+pub fn policy_execution_block_reason(policy: &PolicyDecisionV1) -> Option<String> {
+    match policy.decision {
+        PolicyDecision::Allow => None,
+        PolicyDecision::Deny => Some(format!(
+            "Package policy denied execution: {}",
+            policy.reasons.join("; ")
+        )),
+        PolicyDecision::AskUser => Some(format!(
+            "Package policy requires explicit user approval before execution: {}",
+            policy.reasons.join("; ")
+        )),
+        PolicyDecision::AllowWithRestrictions => Some(format!(
+            "Package policy requires runtime restrictions before execution: {}",
+            policy.reasons.join("; ")
+        )),
+    }
+}
+
 pub fn evaluate_package_policy(
     manifest: &PackageManifestV1,
     package_ref: impl Into<String>,
@@ -59,9 +77,17 @@ pub fn evaluate_package_policy(
                     permission.name
                 ));
             }
-            "network.http" | "network.websocket" | "user.files.read" | "user.files.write"
-            | "microphone.read" | "camera.read" | "wallet.connect" | "clipboard.read"
-            | "clipboard.write" => {
+            "network.http"
+            | "network.websocket"
+            | "swarm.write"
+            | "user.files.read"
+            | "user.files.write"
+            | "microphone.read"
+            | "camera.read"
+            | "wallet.connect"
+            | "clipboard.read"
+            | "clipboard.write"
+            | "receipt.public-evidence" => {
                 if decision != PolicyDecision::Deny {
                     decision = PolicyDecision::AskUser;
                     risk_level = RiskLevel::Medium;
@@ -70,6 +96,17 @@ pub fn evaluate_package_policy(
                     "Permission {} requires explicit approval",
                     permission.name
                 ));
+            }
+            "private-cache.write" => {
+                if decision != PolicyDecision::Deny {
+                    decision = PolicyDecision::AllowWithRestrictions;
+                    risk_level = RiskLevel::Medium;
+                    restrictions = json!({"cache": "runner-controlled-quota"});
+                }
+                reasons.push(
+                    "Permission private-cache.write requires runner-controlled cache limits"
+                        .to_string(),
+                );
             }
             _ if permission.required => {
                 if decision != PolicyDecision::Deny {

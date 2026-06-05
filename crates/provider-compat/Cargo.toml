@@ -1,0 +1,13 @@
+[package]
+name = "hivemind-provider-compat"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+hivemind-core = { path = "../core" }
+hivemind-realtime = { path = "../realtime" }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true

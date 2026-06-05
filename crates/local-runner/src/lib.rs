@@ -7,7 +7,9 @@ use hivemind_core::{
     manifest_supports_capability, runner_supports_capability, select_artifact_group,
 };
 use hivemind_package::{LocalPackage, load_package_from_storage};
-use hivemind_policy::{PolicyDecision, evaluate_package_policy};
+use hivemind_policy::{
+    PolicyDecision, PolicyDecisionV1, evaluate_package_policy, policy_execution_block_reason,
+};
 use hivemind_receipts::{ReceiptDraft, create_signed_receipt, receipt_policy_evidence};
 use hivemind_storage::StorageProvider;
 use schemars::JsonSchema;
@@ -68,6 +70,8 @@ pub struct InstalledPackageV1 {
     #[serde(rename = "cachePath")]
     pub cache_path: String,
     pub files: Vec<CachedArtifactFileV1>,
+    #[serde(rename = "policyDecision", default)]
+    pub policy_decision: Option<PolicyDecisionV1>,
     #[serde(rename = "accessEvaluation", default)]
     pub access_evaluation: Option<AccessEvaluationV1>,
     #[serde(rename = "cacheSensitivity", default)]
@@ -157,7 +161,35 @@ pub fn install_from_storage_with_revocations(
     access_grant: Option<&AccessGrantV1>,
     access_revocation_list: Option<&hivemind_core::AccessRevocationListV1>,
 ) -> anyhow::Result<InstalledPackageV1> {
+    install_from_storage_with_revocations_and_policy(
+        package_ref,
+        storage,
+        cache_dir,
+        preferred_artifact_group,
+        access_grant,
+        access_revocation_list,
+        false,
+    )
+}
+
+pub fn install_from_storage_with_revocations_and_policy(
+    package_ref: &str,
+    storage: &impl StorageProvider,
+    cache_dir: &Path,
+    preferred_artifact_group: Option<&str>,
+    access_grant: Option<&AccessGrantV1>,
+    access_revocation_list: Option<&hivemind_core::AccessRevocationListV1>,
+    developer_mode: bool,
+) -> anyhow::Result<InstalledPackageV1> {
     let package = load_package_from_storage(package_ref, storage)?;
+    let policy =
+        evaluate_package_policy(&package.manifest, package_ref, Some(RUNNER_ID.to_string()));
+    if policy.decision == PolicyDecision::Deny && !developer_mode {
+        anyhow::bail!(
+            "package policy denied before artifact download: {}",
+            policy.reasons.join("; ")
+        );
+    }
     let access = evaluate_execution_access_with_revocations(
         &package.manifest,
         package_ref,
@@ -229,6 +261,7 @@ pub fn install_from_storage_with_revocations(
         artifact_group: artifact.id.clone(),
         cache_path: install_dir.display().to_string(),
         files,
+        policy_decision: Some(policy),
         access_evaluation: Some(access),
         cache_sensitivity,
         sensitive_cache_marker,
@@ -352,14 +385,11 @@ pub async fn execute_with_route(
         request.access_revocation_list.as_ref(),
     );
 
-    if policy.decision == PolicyDecision::Deny {
+    if let Some(policy_reason) = policy_execution_block_reason(&policy) {
         return ExecutionResponseV1::failed(
             request.request_id,
-            SwarmAiErrorV1::new(
-                ErrorCode::AccessDenied,
-                "Package permissions are denied by local policy",
-            )
-            .with_details(json!({ "policy": policy })),
+            SwarmAiErrorV1::new(ErrorCode::AccessDenied, policy_reason)
+                .with_details(json!({ "policy": policy })),
             ExecutionMetrics::default(),
         );
     }
@@ -625,11 +655,11 @@ fn safe_file_component(value: &str) -> String {
 mod tests {
     use super::*;
     use hivemind_core::{
-        ArtifactGroup, ArtifactMinimum, LicenseInfo, LicenseType, PackageKind, Publisher,
-        license_policy_from_manifest,
+        ArtifactGroup, ArtifactMinimum, ExecutionOptions, ExecutionPrivacy, LicenseInfo,
+        LicenseType, PackageKind, PermissionRequest, Publisher, license_policy_from_manifest,
     };
     use hivemind_storage::{LocalDirectoryStorageProvider, StorageProvider};
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     #[test]
     fn clears_only_matching_package_ref() {
@@ -702,6 +732,145 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn denied_policy_blocks_install_before_artifact_cache() {
+        let root = unique_temp_dir("hivemind-policy-cache-test");
+        let package_dir = root.join("package");
+        let storage_dir = root.join("storage");
+        let cache_dir = root.join("runner");
+        fs::create_dir_all(package_dir.join("model")).unwrap();
+        fs::write(package_dir.join("model").join("config.json"), "{}").unwrap();
+        fs::write(
+            package_dir.join("model").join("tokenizer.json"),
+            "{\"tokens\":[]}",
+        )
+        .unwrap();
+        let mut manifest = manifest(LicenseType::Open);
+        manifest.permissions.push(PermissionRequest {
+            name: "local.shell".to_string(),
+            purpose: Some("run setup script".to_string()),
+            required: true,
+            limits: json!({}),
+        });
+        fs::write(
+            package_dir.join("swarm-ai.json"),
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let mut storage = LocalDirectoryStorageProvider::new(storage_dir);
+        let upload = storage.upload_directory(&package_dir).unwrap();
+        let error =
+            install_from_storage(&upload.reference, &storage, &cache_dir, None, None).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("package policy denied before artifact download")
+        );
+        assert!(!cache_dir.exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn developer_mode_can_cache_policy_denied_package_for_inspection() {
+        let root = unique_temp_dir("hivemind-policy-developer-cache-test");
+        let package_dir = root.join("package");
+        let storage_dir = root.join("storage");
+        let cache_dir = root.join("runner");
+        fs::create_dir_all(package_dir.join("model")).unwrap();
+        fs::write(package_dir.join("model").join("config.json"), "{}").unwrap();
+        fs::write(
+            package_dir.join("model").join("tokenizer.json"),
+            "{\"tokens\":[]}",
+        )
+        .unwrap();
+        let mut manifest = manifest(LicenseType::Open);
+        manifest.permissions.push(PermissionRequest {
+            name: "local.shell".to_string(),
+            purpose: Some("run setup script".to_string()),
+            required: true,
+            limits: json!({}),
+        });
+        fs::write(
+            package_dir.join("swarm-ai.json"),
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let mut storage = LocalDirectoryStorageProvider::new(storage_dir);
+        let upload = storage.upload_directory(&package_dir).unwrap();
+        let install = install_from_storage_with_revocations_and_policy(
+            &upload.reference,
+            &storage,
+            &cache_dir,
+            None,
+            None,
+            None,
+            true,
+        )
+        .unwrap();
+
+        let policy = install
+            .policy_decision
+            .expect("install should preserve policy decision");
+        assert_eq!(policy.decision, PolicyDecision::Deny);
+        assert!(PathBuf::from(&install.cache_path).exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn consent_required_policy_blocks_local_execution() {
+        let mut manifest = manifest(LicenseType::Open);
+        manifest.permissions.push(PermissionRequest {
+            name: "network.http".to_string(),
+            purpose: Some("call an external API".to_string()),
+            required: false,
+            limits: json!({ "allowedHosts": ["api.example.com"] }),
+        });
+        let package = LocalPackage {
+            root: PathBuf::new(),
+            manifest,
+            manifest_hash: "0".repeat(64),
+            package_ref: "bzz://pkg".to_string(),
+        };
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-1".to_string(),
+            package_ref: package.package_ref.clone(),
+            package_id: package.manifest.package_id.clone(),
+            package_version: package.manifest.version.clone(),
+            preferred_artifact_group: None,
+            task: "embedding".to_string(),
+            input: json!({ "text": "hello local" }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let response = execute(request, package).await;
+
+        assert_eq!(response.status, ExecutionStatus::Failed);
+        assert_eq!(
+            response.error.as_ref().unwrap().code,
+            ErrorCode::AccessDenied
+        );
+        assert_eq!(
+            response
+                .error
+                .as_ref()
+                .unwrap()
+                .details
+                .get("policy")
+                .and_then(|policy| policy.get("decision"))
+                .and_then(Value::as_str),
+            Some("ask-user")
+        );
+    }
+
     fn write_install(dir: &Path, package_ref: &str, size_bytes: usize) {
         fs::create_dir_all(dir).unwrap();
         fs::write(dir.join("model.bin"), vec![0u8; size_bytes]).unwrap();
@@ -718,6 +887,7 @@ mod tests {
                 size_bytes,
                 sha256: None,
             }],
+            policy_decision: None,
             access_evaluation: None,
             cache_sensitivity: CacheSensitivity::Public,
             sensitive_cache_marker: None,

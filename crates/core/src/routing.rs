@@ -1,7 +1,7 @@
 use crate::artifact::select_artifact_group;
 use crate::execution::ExecutionRequestV1;
 use crate::manifest::{PackageManifestV1, manifest_supports_capability};
-use crate::policy::{PolicyDecision, evaluate_package_policy};
+use crate::policy::{PolicyDecision, PolicyDecisionV1, evaluate_package_policy};
 use crate::runner::{RunnerDescriptorV1, RunnerType, runner_supports_capability};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,12 @@ pub struct CandidateRoute {
         skip_serializing_if = "Option::is_none"
     )]
     pub quality_score: Option<f64>,
+    #[serde(
+        rename = "policyDecision",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub policy_decision: Option<PolicyDecisionV1>,
     pub decision: RouteDecision,
     #[serde(default)]
     pub reason: Option<String>,
@@ -97,9 +103,9 @@ pub fn plan_route_for_runner(
         reason = "Runner does not support any matching artifact group".to_string();
     }
 
-    if policy.decision == PolicyDecision::Deny {
+    if let Some(policy_reason) = policy_route_block_reason(&policy, &policy_mode) {
         decision = RouteDecision::Rejected;
-        reason = policy.reasons.join("; ");
+        reason = policy_reason;
     }
 
     if !manifest_supports_capability(manifest, &request.task) {
@@ -154,6 +160,7 @@ pub fn plan_route_for_runner(
             privacy: privacy.to_string(),
         },
         quality_score: None,
+        policy_decision: Some(policy),
         decision,
         reason: Some(reason.clone()),
     };
@@ -173,5 +180,26 @@ pub fn plan_route_for_runner(
         selected_route_id,
         fallback_route_ids: Vec::new(),
         reason,
+    }
+}
+
+pub fn policy_route_block_reason(
+    policy: &PolicyDecisionV1,
+    policy_mode: &PolicyMode,
+) -> Option<String> {
+    match policy.decision {
+        PolicyDecision::Allow => None,
+        PolicyDecision::Deny => Some(policy.reasons.join("; ")),
+        PolicyDecision::AskUser if *policy_mode != PolicyMode::Developer => Some(format!(
+            "Policy requires explicit user approval before route selection: {}",
+            policy.reasons.join("; ")
+        )),
+        PolicyDecision::AllowWithRestrictions if *policy_mode != PolicyMode::Developer => {
+            Some(format!(
+                "Policy requires enforceable restrictions before route selection: {}",
+                policy.reasons.join("; ")
+            ))
+        }
+        PolicyDecision::AskUser | PolicyDecision::AllowWithRestrictions => None,
     }
 }

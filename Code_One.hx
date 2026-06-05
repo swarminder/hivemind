@@ -2,7 +2,6 @@ package;
 
 import sys.FileSystem;
 import sys.io.File;
-import sys.io.Process;
 
 class Code_One {
   static inline var PRIMARY_BRANCH:String = "main";
@@ -150,9 +149,9 @@ class Code_One {
     if (arx == null) arx = [];
     trace("Executing: " + crx + " " + arx.join(" "));
 
-    var process:Process;
+    var exit = -1;
     try {
-      process = new Process(crx, arx);
+      exit = Sys.command(crx, arx);
     } catch (e:Dynamic) {
       trace("Warning/Error: Cannot start " + crx + ": " + Std.string(e));
       if (really != null) {
@@ -161,44 +160,18 @@ class Code_One {
       return "";
     }
 
-    var bounce = "";
-    var message = "";
-
-    try {
-      bounce = process.stdout.readAll().toString();
-    } catch (e:Dynamic) {
-      bounce = "";
-    }
-
-    try {
-      message = process.stderr.readAll().toString();
-    } catch (e:Dynamic) {
-      message = "";
-    }
-
-    var exit = process.exitCode();
-    process.close();
-
-    if (bounce != "") {
-      trace("Announcement: " + bounce);
-    }
-
     if (exit != 0) {
-      trace("Warning/Error: " + crx + " exited with code " + exit + "\n" + message);
+      trace("Warning/Error: " + crx + " exited with code " + exit);
       if (really != null) {
         really[0] = false;
       }
-      return bounce;
-    }
-
-    if (message != "") {
-      trace("Notice: " + message);
+      return "";
     }
 
     if (really != null) {
       really[0] = true;
     }
-    return bounce;
+    return "";
   }
 
   static public function temporas(?oh:String):Void {

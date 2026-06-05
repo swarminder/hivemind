@@ -6,7 +6,13 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+hivemind-batch = { path = "../batch" }
 hivemind-core = { path = "../core" }
+hivemind-evals = { path = "../evals" }
+hivemind-fine-tune = { path = "../fine-tune" }
+hivemind-media = { path = "../media" }
+hivemind-realtime = { path = "../realtime" }
+hivemind-vector = { path = "../vector" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

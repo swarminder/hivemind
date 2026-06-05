@@ -1,8 +1,11 @@
 use chrono::{DateTime, Utc};
 pub use hivemind_core::{
     AccessControlMode, AccessControlV1, AccessDecision, AccessEvaluationV1,
-    AccessGrantRevocationV1, AccessGrantV1, AccessMethod, AccessProofV1, AccessRequestV1,
-    AccessRevocationListV1, LicensePolicyV1,
+    AccessGrantRevocationV1, AccessGrantV1, AccessGrantV2, AccessMethod,
+    AccessPaymentRequirementV1, AccessPolicyV1, AccessPolicyV1Context, AccessPolicyVerificationV1,
+    AccessPrivacyRequirementV1, AccessProofV1, AccessRequestV1, AccessRevocationListV1,
+    AccessRightV1, AccessScopeV1, AccessSubjectTypeV1, AccessSubjectV1,
+    AccessVerificationRequirementV1, LicensePolicyV1,
 };
 use hivemind_core::{
     PackageManifestV1, ValidationIssue, canonicalize_json, hash_canonical_json,
@@ -17,11 +20,29 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const DEV_GRANT_SIGNATURE_PREFIX: &str = "dev-signature-v1";
+const DEV_GRANT_V2_SIGNATURE_PREFIX: &str = "dev-access-grant-v2-signature-v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct AccessGrantVerificationV1 {
     #[serde(rename = "schemaVersion")]
     pub schema_version: String,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AccessGrantV2VerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "grantId")]
+    pub grant_id: String,
+    #[serde(rename = "expectedGrantId")]
+    pub expected_grant_id: String,
     pub valid: bool,
     pub issues: Vec<ValidationIssue>,
     pub warnings: Vec<ValidationIssue>,
@@ -348,6 +369,122 @@ pub fn verify_access_grant(grant: &AccessGrantV1) -> AccessGrantVerificationV1 {
     }
     AccessGrantVerificationV1 {
         schema_version: "swarm-ai.access-grant-verification.v1".to_string(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339(),
+    }
+}
+
+pub fn dev_access_grant_v2(
+    issuer: impl Into<String>,
+    grantee: impl Into<String>,
+    scopes: Vec<AccessScopeV1>,
+    subjects: Vec<AccessSubjectV1>,
+    allowed_uses: Vec<String>,
+    expires_at: Option<String>,
+) -> serde_json::Result<AccessGrantV2> {
+    let mut grant = AccessGrantV2 {
+        schema_version: "hivemind.access-grant.v2".to_string(),
+        grant_id: "access-grant-pending".to_string(),
+        issuer: issuer.into(),
+        grantee: grantee.into(),
+        scopes,
+        subjects,
+        allowed_uses,
+        constraints: json!({}),
+        issued_at: Utc::now().to_rfc3339(),
+        expires_at,
+        runner_id: None,
+        revocation_list_ref: None,
+        payment_ref: None,
+        settlement_ref: None,
+        evidence_refs: Vec::new(),
+        signatures: Vec::new(),
+    };
+    sign_access_grant_v2(&mut grant)?;
+    Ok(grant)
+}
+
+pub fn canonical_access_grant_v2_id(grant: &AccessGrantV2) -> serde_json::Result<String> {
+    Ok(format!(
+        "access-grant-{}",
+        &hash_canonical_json(&canonicalize_json(&access_grant_v2_signing_value(grant)?))[..24]
+    ))
+}
+
+pub fn expected_access_grant_v2_signature(grant: &AccessGrantV2) -> serde_json::Result<String> {
+    let value = json!({
+        "label": "access-grant-v2",
+        "issuer": grant.issuer,
+        "payload": access_grant_v2_signing_value(grant)?,
+    });
+    Ok(format!(
+        "{DEV_GRANT_V2_SIGNATURE_PREFIX}:{}",
+        &hash_canonical_json(&canonicalize_json(&value))[..32]
+    ))
+}
+
+pub fn sign_access_grant_v2(grant: &mut AccessGrantV2) -> serde_json::Result<String> {
+    grant.grant_id = canonical_access_grant_v2_id(grant)?;
+    let signature = expected_access_grant_v2_signature(grant)?;
+    grant
+        .signatures
+        .retain(|value| !value.starts_with(DEV_GRANT_V2_SIGNATURE_PREFIX));
+    grant.signatures.push(signature.clone());
+    Ok(signature)
+}
+
+pub fn verify_access_grant_v2(grant: &AccessGrantV2) -> AccessGrantV2VerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_grant_id =
+        canonical_access_grant_v2_id(grant).unwrap_or_else(|_| "access-grant-invalid".to_string());
+    let expected_signature = expected_access_grant_v2_signature(grant)
+        .unwrap_or_else(|_| format!("{DEV_GRANT_V2_SIGNATURE_PREFIX}:invalid"));
+
+    if grant.schema_version != "hivemind.access-grant.v2" {
+        issues.push(issue(
+            "$.schemaVersion",
+            "Expected schemaVersion to be hivemind.access-grant.v2",
+        ));
+    }
+    if grant.grant_id.trim().is_empty() {
+        issues.push(issue("$.grantId", "Access grant id is required"));
+    } else if grant.grant_id != expected_grant_id {
+        issues.push(issue(
+            "$.grantId",
+            "Access grant id does not match canonical grant content",
+        ));
+    }
+    if grant.issuer.trim().is_empty() {
+        issues.push(issue("$.issuer", "Access grant issuer is required"));
+    }
+    if grant.grantee.trim().is_empty() {
+        issues.push(issue("$.grantee", "Access grant grantee is required"));
+    }
+    validate_access_scopes(&grant.scopes, &grant.subjects, &mut issues);
+    validate_access_subjects(&grant.subjects, &mut issues, &mut warnings);
+    validate_access_grant_timestamps(grant, &mut issues);
+    validate_access_grant_refs(grant, &mut warnings);
+    if !grant.constraints.is_null() && !grant.constraints.is_object() {
+        warnings.push(issue(
+            "$.constraints",
+            "Access grant constraints should be an object when present",
+        ));
+    }
+    verify_access_grant_v2_signatures(
+        &grant.signatures,
+        &expected_signature,
+        &mut issues,
+        &mut warnings,
+    );
+
+    AccessGrantV2VerificationV1 {
+        schema_version: "hivemind.access-grant-verification.v2".to_string(),
+        grant_id: grant.grant_id.clone(),
+        expected_grant_id,
         valid: issues.is_empty(),
         issues,
         warnings,
@@ -1031,6 +1168,256 @@ fn evaluation(
     }
 }
 
+fn access_grant_v2_signing_value(grant: &AccessGrantV2) -> serde_json::Result<Value> {
+    let mut value = serde_json::to_value(grant)?;
+    if let Value::Object(object) = &mut value {
+        object.remove("grantId");
+        object.remove("signatures");
+    }
+    Ok(value)
+}
+
+fn validate_access_scopes(
+    scopes: &[AccessScopeV1],
+    subjects: &[AccessSubjectV1],
+    issues: &mut Vec<ValidationIssue>,
+) {
+    if scopes.is_empty() {
+        issues.push(issue(
+            "$.scopes",
+            "Access grant must include at least one asset-level scope",
+        ));
+        return;
+    }
+
+    let mut seen = BTreeSet::new();
+    for (index, scope) in scopes.iter().enumerate() {
+        if !seen.insert(*scope) {
+            issues.push(issue(
+                format!("$.scopes[{index}]"),
+                "Access grant contains a duplicate scope",
+            ));
+        }
+        if !subjects
+            .iter()
+            .any(|subject| scope_matches_subject(*scope, subject.subject_type))
+        {
+            issues.push(issue(
+                format!("$.scopes[{index}]"),
+                "Access grant scope has no compatible subject",
+            ));
+        }
+    }
+}
+
+fn validate_access_subjects(
+    subjects: &[AccessSubjectV1],
+    issues: &mut Vec<ValidationIssue>,
+    warnings: &mut Vec<ValidationIssue>,
+) {
+    if subjects.is_empty() {
+        issues.push(issue(
+            "$.subjects",
+            "Access grant must scope at least one asset, package, service, namespace, feed, receipt, trace, vector store, dataset, or tool",
+        ));
+        return;
+    }
+
+    let mut seen_subjects = BTreeSet::new();
+    for (index, subject) in subjects.iter().enumerate() {
+        let subject_path = format!("$.subjects[{index}]");
+        if subject.subject_id.trim().is_empty() {
+            issues.push(issue(
+                format!("{subject_path}.subjectId"),
+                "Access subject id is required",
+            ));
+        } else if !seen_subjects.insert((subject.subject_type, subject.subject_id.clone())) {
+            issues.push(issue(
+                format!("{subject_path}.subjectId"),
+                "Access grant contains a duplicate subject",
+            ));
+        }
+        if subject.refs.is_empty() && subject.content_hash.is_none() && subject.namespace.is_none()
+        {
+            warnings.push(issue(
+                subject_path.clone(),
+                "Access subject should include at least one concrete ref, contentHash, or namespace",
+            ));
+        }
+        for (ref_index, reference) in subject.refs.iter().enumerate() {
+            if reference.trim().is_empty() {
+                issues.push(issue(
+                    format!("{subject_path}.refs[{ref_index}]"),
+                    "Access subject ref must not be empty",
+                ));
+            } else if !looks_like_access_reference(reference) {
+                warnings.push(issue(
+                    format!("{subject_path}.refs[{ref_index}]"),
+                    "Access subject ref is not a recognized Swarm, local, web, IPFS, or hash reference",
+                ));
+            }
+        }
+        if let Some(content_hash) = &subject.content_hash
+            && !looks_like_hash_ref(content_hash)
+        {
+            warnings.push(issue(
+                format!("{subject_path}.contentHash"),
+                "Access subject contentHash is not sha256-like",
+            ));
+        }
+        if let Some(namespace) = &subject.namespace
+            && namespace.trim().is_empty()
+        {
+            issues.push(issue(
+                format!("{subject_path}.namespace"),
+                "Access subject namespace must not be empty",
+            ));
+        }
+        if matches!(subject.subject_type, AccessSubjectTypeV1::Namespace)
+            && subject.namespace.is_none()
+        {
+            warnings.push(issue(
+                format!("{subject_path}.namespace"),
+                "Namespace subjects should include the concrete namespace value",
+            ));
+        }
+    }
+}
+
+fn validate_access_grant_timestamps(grant: &AccessGrantV2, issues: &mut Vec<ValidationIssue>) {
+    if DateTime::parse_from_rfc3339(&grant.issued_at).is_err() {
+        issues.push(issue("$.issuedAt", "Access grant issuedAt must be RFC3339"));
+    }
+    if let Some(expires_at) = &grant.expires_at {
+        match DateTime::parse_from_rfc3339(expires_at) {
+            Ok(expires_at) if expires_at.with_timezone(&Utc) <= Utc::now() => {
+                issues.push(issue("$.expiresAt", "Access grant is expired"));
+            }
+            Ok(_) => {}
+            Err(_) => issues.push(issue(
+                "$.expiresAt",
+                "Access grant expiresAt must be RFC3339",
+            )),
+        }
+    }
+}
+
+fn validate_access_grant_refs(grant: &AccessGrantV2, warnings: &mut Vec<ValidationIssue>) {
+    for (index, reference) in grant.evidence_refs.iter().enumerate() {
+        if !looks_like_access_reference(reference) {
+            warnings.push(issue(
+                format!("$.evidenceRefs[{index}]"),
+                "Evidence ref is not a recognized Swarm, local, web, IPFS, or hash reference",
+            ));
+        }
+    }
+    for (path, reference) in [
+        ("$.revocationListRef", grant.revocation_list_ref.as_deref()),
+        ("$.paymentRef", grant.payment_ref.as_deref()),
+        ("$.settlementRef", grant.settlement_ref.as_deref()),
+    ] {
+        if let Some(reference) = reference
+            && !looks_like_access_reference(reference)
+        {
+            warnings.push(issue(
+                path,
+                "Reference is not a recognized Swarm, local, web, IPFS, or hash reference",
+            ));
+        }
+    }
+}
+
+fn verify_access_grant_v2_signatures(
+    signatures: &[String],
+    expected_signature: &str,
+    issues: &mut Vec<ValidationIssue>,
+    warnings: &mut Vec<ValidationIssue>,
+) {
+    if signatures.is_empty() {
+        warnings.push(issue(
+            "$.signatures",
+            "Access grant is unsigned development data",
+        ));
+        return;
+    }
+    let mut matched = false;
+    let mut saw_local_dev = false;
+    for (index, signature) in signatures.iter().enumerate() {
+        let path = format!("$.signatures[{index}]");
+        if signature.trim().is_empty() {
+            issues.push(issue(path, "Signature must not be empty"));
+        } else if signature == expected_signature {
+            matched = true;
+            saw_local_dev = true;
+        } else if signature.starts_with(DEV_GRANT_V2_SIGNATURE_PREFIX) {
+            saw_local_dev = true;
+            issues.push(issue(
+                path,
+                "Access grant V2 signature does not match canonical content",
+            ));
+        } else {
+            warnings.push(issue(
+                path,
+                "Access grant includes a non-local signature that was not verified here",
+            ));
+        }
+    }
+    if matched {
+        warnings.push(issue(
+            "$.signatures",
+            "Signature is deterministic local-dev signing, not production identity signing",
+        ));
+    } else if !saw_local_dev {
+        warnings.push(issue(
+            "$.signatures",
+            "Access grant does not include a locally verifiable development signature",
+        ));
+    }
+}
+
+fn scope_matches_subject(scope: AccessScopeV1, subject_type: AccessSubjectTypeV1) -> bool {
+    match scope {
+        AccessScopeV1::ReadAsset => matches!(
+            subject_type,
+            AccessSubjectTypeV1::Asset
+                | AccessSubjectTypeV1::Dataset
+                | AccessSubjectTypeV1::VectorStore
+                | AccessSubjectTypeV1::Tool
+                | AccessSubjectTypeV1::Receipt
+                | AccessSubjectTypeV1::Trace
+        ),
+        AccessScopeV1::ExecutePackage | AccessScopeV1::ValidatePackage => {
+            subject_type == AccessSubjectTypeV1::Package
+        }
+        AccessScopeV1::RunService => subject_type == AccessSubjectTypeV1::Service,
+        AccessScopeV1::PublishToNamespace => subject_type == AccessSubjectTypeV1::Namespace,
+        AccessScopeV1::UpdateFeed => subject_type == AccessSubjectTypeV1::Feed,
+        AccessScopeV1::ViewReceipt => subject_type == AccessSubjectTypeV1::Receipt,
+        AccessScopeV1::ViewTrace => subject_type == AccessSubjectTypeV1::Trace,
+        AccessScopeV1::UseVectorStore => subject_type == AccessSubjectTypeV1::VectorStore,
+        AccessScopeV1::UseDataset => subject_type == AccessSubjectTypeV1::Dataset,
+        AccessScopeV1::UseTool => subject_type == AccessSubjectTypeV1::Tool,
+        AccessScopeV1::ResellOrDelegate => true,
+    }
+}
+
+fn looks_like_access_reference(value: &str) -> bool {
+    let value = value.trim();
+    value.starts_with("bzz://")
+        || value.starts_with("local://")
+        || value.starts_with("ipfs://")
+        || value.starts_with("http://")
+        || value.starts_with("https://")
+        || looks_like_hash_ref(value)
+}
+
+fn looks_like_hash_ref(value: &str) -> bool {
+    let value = value.trim();
+    value.starts_with("sha256:")
+        || value.starts_with("sha256://")
+        || (value.len() == 64 && value.as_bytes().iter().all(|byte| byte.is_ascii_hexdigit()))
+}
+
 fn grant_signing_value(grant: &AccessGrantV1) -> Value {
     json!({
         "schemaVersion": grant.schema_version,
@@ -1301,6 +1688,86 @@ mod tests {
                 .reasons
                 .iter()
                 .any(|reason| reason.contains("signature verification failed"))
+        );
+    }
+
+    #[test]
+    fn access_grant_v2_signs_asset_scoped_dataset_grants_and_detects_tampering() {
+        let subject = AccessSubjectV1 {
+            subject_id: "dataset/customer-support-v1".to_string(),
+            subject_type: AccessSubjectTypeV1::Dataset,
+            refs: vec!["bzz://dataset-customer-support".to_string()],
+            asset_class: Some("dataset".to_string()),
+            content_hash: Some(format!("sha256:{}", "a".repeat(64))),
+            namespace: None,
+        };
+        let mut grant = dev_access_grant_v2(
+            "did:hivemind:publisher",
+            "did:hivemind:research-team",
+            vec![AccessScopeV1::ReadAsset, AccessScopeV1::UseDataset],
+            vec![subject],
+            vec!["research".to_string(), "evaluation".to_string()],
+            None,
+        )
+        .unwrap();
+
+        let verification = verify_access_grant_v2(&grant);
+
+        assert_eq!(grant.schema_version, "hivemind.access-grant.v2");
+        assert!(grant.grant_id.starts_with("access-grant-"));
+        assert_eq!(verification.expected_grant_id, grant.grant_id);
+        assert_eq!(verification.expected_signature, grant.signatures[0]);
+        assert!(verification.valid, "{verification:#?}");
+        assert!(
+            verification
+                .warnings
+                .iter()
+                .any(|warning| warning.path == "$.signatures")
+        );
+
+        grant.subjects[0].refs = vec!["bzz://different-dataset".to_string()];
+        let tampered = verify_access_grant_v2(&grant);
+
+        assert!(!tampered.valid);
+        assert!(
+            tampered
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.grantId" || issue.path.starts_with("$.signatures"))
+        );
+    }
+
+    #[test]
+    fn access_grant_v2_rejects_scope_subject_mismatch_and_expired_grants() {
+        let subject = AccessSubjectV1 {
+            subject_id: "namespace/team-lab".to_string(),
+            subject_type: AccessSubjectTypeV1::Namespace,
+            refs: Vec::new(),
+            asset_class: None,
+            content_hash: None,
+            namespace: Some("team-lab".to_string()),
+        };
+        let grant = dev_access_grant_v2(
+            "did:hivemind:publisher",
+            "did:hivemind:delegate",
+            vec![AccessScopeV1::UseDataset],
+            vec![subject],
+            vec!["research".to_string()],
+            Some("2000-01-01T00:00:00Z".to_string()),
+        )
+        .unwrap();
+
+        let verification = verify_access_grant_v2(&grant);
+
+        assert!(!verification.valid);
+        assert!(verification.issues.iter().any(
+            |issue| issue.path == "$.scopes[0]" && issue.message.contains("compatible subject")
+        ));
+        assert!(
+            verification
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.expiresAt")
         );
     }
 

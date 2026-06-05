@@ -73,8 +73,8 @@ button:hover {
   flex: 1;
   display: grid;
   grid-template-columns:
-    minmax(250px, 0.85fr) minmax(320px, 1.08fr) minmax(280px, 0.95fr)
-    minmax(320px, 1fr);
+    minmax(240px, 0.8fr) minmax(300px, 1fr) minmax(270px, 0.9fr)
+    minmax(240px, 0.75fr) minmax(320px, 1fr);
   gap: 1px;
   background: #d4ddd6;
   min-height: 0;
@@ -137,6 +137,75 @@ button:hover {
 .field {
   display: grid;
   gap: 0.35rem;
+}
+
+.check-field {
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #31413a;
+  font-size: 0.86rem;
+}
+
+.check-field input {
+  width: auto;
+  min-height: auto;
+  margin: 0;
+}
+
+.trust-strip {
+  min-height: 1.75rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  overflow-wrap: anywhere;
+  color: #596861;
+  font-size: 0.78rem;
+}
+
+.registry-governance-status {
+  min-height: 1.5rem;
+  color: #596861;
+  font-size: 0.78rem;
+}
+
+.registry-governance {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.registry-governance-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.registry-governance-row {
+  border: 1px solid #d4ddd6;
+  border-radius: 6px;
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.schema-release-row {
+  border-left: 3px solid #1f5f8b;
+}
+
+.component-readiness-row {
+  border-left: 3px solid #506616;
+}
+
+.registry-governance-row strong {
+  font-size: 0.88rem;
+}
+
+.registry-governance-row small {
+  color: #596861;
+  overflow-wrap: anywhere;
 }
 
 .field span {
@@ -253,6 +322,30 @@ textarea {
   justify-content: flex-start;
 }
 
+.jobs-actions {
+  justify-content: flex-start;
+}
+
+.governance-actions {
+  justify-content: flex-start;
+}
+
+.jobs-actions button {
+  padding: 0 0.65rem;
+  font-size: 0.82rem;
+}
+
+.governance-actions button {
+  border-color: #506616;
+  background: #506616;
+  padding: 0 0.65rem;
+  font-size: 0.82rem;
+}
+
+.governance-actions button:hover {
+  background: #39490f;
+}
+
 .market-actions button {
   padding: 0 0.65rem;
   font-size: 0.82rem;
@@ -364,6 +457,19 @@ textarea {
   gap: 0.55rem;
 }
 
+.governance-list {
+  display: grid;
+  gap: 0.55rem;
+  overflow: auto;
+}
+
+.trust-list {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 220px;
+  overflow: auto;
+}
+
 .market-row {
   border: 1px solid #d4ddd6;
   border-left: 3px solid #1f5f8b;
@@ -373,11 +479,61 @@ textarea {
   gap: 0.35rem;
 }
 
+.governance-row {
+  border: 1px solid #d4ddd6;
+  border-left: 3px solid #506616;
+  border-radius: 6px;
+  padding: 0.7rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.trust-row {
+  border: 1px solid #d4ddd6;
+  border-left: 3px solid #20483f;
+  border-radius: 6px;
+  padding: 0.7rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.governance-row-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: start;
+}
+
+.trust-row-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: start;
+}
+
+.governance-row-top button {
+  min-height: 2rem;
+  padding: 0 0.65rem;
+  font-size: 0.82rem;
+}
+
+.trust-row-top button {
+  min-height: 2rem;
+  padding: 0 0.65rem;
+  font-size: 0.82rem;
+}
+
 .market-row strong {
   font-size: 0.9rem;
 }
 
-.market-row small {
+.trust-row strong {
+  font-size: 0.9rem;
+}
+
+.market-row small,
+.trust-row small,
+.governance-row small {
   color: #596861;
   overflow-wrap: anywhere;
 }
@@ -386,7 +542,16 @@ textarea {
   flex: 0 0 190px;
 }
 
-@media (max-width: 1100px) {
+.governance-output {
+  flex: 0 0 190px;
+}
+
+.job-output {
+  flex: 1;
+  max-height: none;
+}
+
+@media (max-width: 1280px) {
   .workspace {
     grid-template-columns: 1fr;
   }

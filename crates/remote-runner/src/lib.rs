@@ -3,7 +3,8 @@ use hivemind_access::evaluate_execution_access_with_revocations;
 use hivemind_core::{
     AccessDecision, ErrorCode, ExecutionMetrics, ExecutionReceiptV1, ExecutionRequestV1,
     ExecutionResponseV1, ExecutionStatus, PackageManifestV1, ReceiptDraft, RunnerDescriptorV1,
-    RunnerLimits, RunnerType, SwarmAiErrorV1, create_signed_receipt, manifest_supports_capability,
+    RunnerLimits, RunnerType, SwarmAiErrorV1, create_signed_receipt, evaluate_package_policy,
+    manifest_supports_capability, policy_execution_block_reason, receipt_policy_evidence,
     runner_supports_capability, select_artifact_group,
 };
 use schemars::JsonSchema;
@@ -132,6 +133,9 @@ pub fn remote_runner_api_contract() -> RemoteRunnerApiV1 {
         endpoints: vec![
             "GET /v1/swarm-ai/health".to_string(),
             "GET /v1/swarm-ai/capabilities".to_string(),
+            "POST /v1/swarm-ai/jobs/quote".to_string(),
+            "POST /v1/swarm-ai/jobs/lease".to_string(),
+            "GET /v1/swarm-ai/jobs/{jobId}/stream".to_string(),
             "POST /v1/swarm-ai/prepare".to_string(),
             "POST /v1/swarm-ai/execute".to_string(),
             "POST /v1/swarm-ai/cancel".to_string(),
@@ -430,6 +434,40 @@ pub fn execute_prepared_with_route(
 
     let started_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let receipt_route_id = route_id.unwrap_or_else(|| format!("remote-{}", descriptor.runner_id));
+    let policy = evaluate_package_policy(
+        manifest,
+        &prepared.package_ref,
+        Some(descriptor.runner_id.clone()),
+    );
+    if let Some(policy_reason) = policy_execution_block_reason(&policy) {
+        return ExecutionResponseV1::failed(
+            request.request_id,
+            SwarmAiErrorV1::new(ErrorCode::AccessDenied, policy_reason)
+                .with_details(json!({ "policy": policy })),
+            ExecutionMetrics::default(),
+        );
+    }
+    let access = evaluate_execution_access_with_revocations(
+        manifest,
+        &prepared.package_ref,
+        &request.request_id,
+        "local-dev",
+        "runner-service",
+        Some(&descriptor.runner_id),
+        request.access_grant.as_ref(),
+        request.access_revocation_list.as_ref(),
+    );
+    if access.decision != AccessDecision::Granted {
+        return ExecutionResponseV1::failed(
+            request.request_id,
+            SwarmAiErrorV1::new(
+                ErrorCode::AccessDenied,
+                "Package license requires an access grant",
+            )
+            .with_details(json!({ "access": access })),
+            ExecutionMetrics::default(),
+        );
+    }
     let queue_ms = u64::from(descriptor.queue_depth) * 25;
     let load_ms = if prepared.warmed { 25 } else { 450 };
     let input_tokens = estimate_tokens(&request.input);
@@ -479,10 +517,13 @@ pub fn execute_prepared_with_route(
             "prepared": prepared,
             "pricing": pricing(),
             "streamingRequested": request.options.stream,
+            "policy": policy,
+            "access": access,
         }),
     };
 
     let finished_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let policy_evidence = receipt_policy_evidence(&policy, finished_at.clone());
     let receipt = create_signed_receipt(ReceiptDraft {
         request: &request,
         response: &response,
@@ -491,7 +532,7 @@ pub fn execute_prepared_with_route(
         manifest_hash: &prepared.manifest_hash,
         runner_id: &descriptor.runner_id,
         route_id: Some(receipt_route_id),
-        policy: None,
+        policy: Some(policy_evidence),
         started_at: &started_at,
         finished_at: &finished_at,
     });
@@ -620,8 +661,9 @@ mod tests {
     use super::*;
     use hivemind_core::{
         ArtifactGroup, ArtifactMinimum, ExecutionOptions, ExecutionPrivacy, LicenseInfo,
-        LicenseType, PackageKind, Publisher,
+        LicenseType, PackageKind, PermissionRequest, PolicyDecision, Publisher,
     };
+    use serde_json::Value;
 
     #[test]
     fn prepares_matching_remote_artifact() {
@@ -631,6 +673,24 @@ mod tests {
 
         assert_eq!(prepared.artifact_group, "cuda-vllm-fp16");
         assert_eq!(prepared.target, "cuda-vllm");
+    }
+
+    #[test]
+    fn api_contract_advertises_quote_lease_and_stream_flow() {
+        let api = remote_runner_api_contract();
+
+        assert!(
+            api.endpoints
+                .contains(&"POST /v1/swarm-ai/jobs/quote".to_string())
+        );
+        assert!(
+            api.endpoints
+                .contains(&"POST /v1/swarm-ai/jobs/lease".to_string())
+        );
+        assert!(
+            api.endpoints
+                .contains(&"GET /v1/swarm-ai/jobs/{jobId}/stream".to_string())
+        );
     }
 
     #[test]
@@ -660,7 +720,8 @@ mod tests {
 
         assert_eq!(response.status, ExecutionStatus::Succeeded);
         assert!(response.output.get("stream").is_some());
-        assert!(receipt_from_remote_response(&response).is_some());
+        let receipt = receipt_from_remote_response(&response).expect("receipt should be present");
+        assert!(receipt.policy.is_some());
     }
 
     #[test]
@@ -688,6 +749,115 @@ mod tests {
 
         assert_eq!(response.status, ExecutionStatus::Failed);
         assert_eq!(response.error.unwrap().code, ErrorCode::RunnerOverloaded);
+    }
+
+    #[test]
+    fn blocks_consent_required_permission_without_approval() {
+        let mut manifest = package();
+        manifest.permissions.push(PermissionRequest {
+            name: "network.http".to_string(),
+            purpose: Some("call an external API".to_string()),
+            required: false,
+            limits: json!({ "allowedHosts": ["api.example.com"] }),
+        });
+        let descriptor = default_remote_gpu_descriptor("remote-1");
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-1".to_string(),
+            package_ref: "bzz://pkg".to_string(),
+            package_id: manifest.package_id.clone(),
+            package_version: manifest.version.clone(),
+            preferred_artifact_group: None,
+            task: "chat".to_string(),
+            input: json!({ "text": "hello remote" }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let response =
+            execute_manifest_with_hash(&manifest, "bzz://pkg", "hash", request, &descriptor);
+
+        assert_eq!(response.status, ExecutionStatus::Failed);
+        assert_eq!(
+            response.error.as_ref().unwrap().code,
+            ErrorCode::AccessDenied
+        );
+        assert_eq!(
+            response
+                .error
+                .as_ref()
+                .unwrap()
+                .details
+                .get("policy")
+                .and_then(|policy| policy.get("decision"))
+                .and_then(Value::as_str),
+            Some("ask-user")
+        );
+    }
+
+    #[test]
+    fn receipt_policy_evidence_matches_remote_runner() {
+        let manifest = package();
+        let descriptor = default_remote_gpu_descriptor("remote-1");
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-1".to_string(),
+            package_ref: "bzz://pkg".to_string(),
+            package_id: manifest.package_id.clone(),
+            package_version: manifest.version.clone(),
+            preferred_artifact_group: None,
+            task: "chat".to_string(),
+            input: json!({ "text": "hello remote" }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let response =
+            execute_manifest_with_hash(&manifest, "bzz://pkg", "hash", request, &descriptor);
+        let receipt = receipt_from_remote_response(&response).expect("receipt should be present");
+        let policy = receipt.policy.expect("policy evidence should be embedded");
+
+        assert_eq!(
+            policy.policy_decision.runner_id.as_deref(),
+            Some("remote-1")
+        );
+        assert_eq!(policy.policy_decision.decision, PolicyDecision::Allow);
+    }
+
+    #[test]
+    fn prepared_execution_enforces_access_grants() {
+        let mut manifest = package();
+        manifest.license.license_type = LicenseType::Commercial;
+        manifest.license.name = Some("Commercial".to_string());
+        let descriptor = default_remote_gpu_descriptor("remote-1");
+        let prepared = prepare_manifest(&manifest, "bzz://pkg", "hash", &descriptor, None).unwrap();
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-1".to_string(),
+            package_ref: "bzz://pkg".to_string(),
+            package_id: manifest.package_id.clone(),
+            package_version: manifest.version.clone(),
+            preferred_artifact_group: None,
+            task: "chat".to_string(),
+            input: json!({ "text": "hello remote" }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let response = execute_prepared(request, &manifest, &prepared, &descriptor);
+
+        assert_eq!(response.status, ExecutionStatus::Failed);
+        assert_eq!(
+            response.error.as_ref().unwrap().code,
+            ErrorCode::AccessDenied
+        );
+        assert!(response.error.unwrap().details.get("access").is_some());
     }
 
     fn package() -> PackageManifestV1 {

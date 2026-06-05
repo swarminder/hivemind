@@ -15,24 +15,39 @@ axum.workspace = true
 chrono.workspace = true
 clap.workspace = true
 hivemind-access = { path = "../access" }
+hivemind-batch = { path = "../batch" }
 hivemind-benchmarks = { path = "../benchmarks" }
 hivemind-browser-runner = { path = "../browser-runner" }
 hivemind-core = { path = "../core" }
+hivemind-evals = { path = "../evals" }
+hivemind-fine-tune = { path = "../fine-tune" }
+hivemind-governance = { path = "../governance" }
 hivemind-identity = { path = "../identity" }
+hivemind-jobs = { path = "../jobs" }
 hivemind-local-runner = { path = "../local-runner" }
 hivemind-marketplace = { path = "../marketplace" }
+hivemind-media = { path = "../media" }
+hivemind-miner = { path = "../miner" }
+hivemind-moderation = { path = "../moderation" }
+hivemind-observability = { path = "../observability" }
 hivemind-openai-compat = { path = "../openai-compat" }
 hivemind-package = { path = "../package" }
 hivemind-policy = { path = "../policy" }
+hivemind-provider-compat = { path = "../provider-compat" }
 hivemind-publisher = { path = "../publisher" }
 hivemind-receipts = { path = "../receipts" }
+hivemind-realtime = { path = "../realtime" }
+hivemind-research = { path = "../research" }
 hivemind-registry = { path = "../registry" }
 hivemind-remote-runner = { path = "../remote-runner" }
 hivemind-router = { path = "../router" }
 hivemind-sdk = { path = "../sdk" }
 hivemind-storage = { path = "../storage" }
+hivemind-streams = { path = "../streams" }
 hivemind-validator = { path = "../validator" }
+hivemind-vector = { path = "../vector" }
 hivemind-weeb3-adapter = { path = "../weeb3-adapter" }
+hivemind-workflow = { path = "../workflow" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

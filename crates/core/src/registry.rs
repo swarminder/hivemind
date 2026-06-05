@@ -1,5 +1,10 @@
-use crate::manifest::{LicenseInfo, PackageKind, PackageManifestV1, Publisher};
+use crate::job::{ApiSurface, Modality, PriceV1};
+use crate::manifest::{
+    ArtifactGroup, LicenseInfo, PackageKind, PackageManifestV1, Publisher,
+    artifact_group_v2_from_v1, modalities_from_capabilities, supported_apis_from_capabilities,
+};
 use crate::policy::{PolicyDecision, RiskLevel, evaluate_package_policy};
+use crate::trust::{IntegrityTier, PrivacyTier};
 use crate::{AccessGrantV1, AccessRevocationListV1};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -52,6 +57,32 @@ pub struct RegistryBenchmarkScoreV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RegistryMarketplaceListingSummaryV1 {
+    #[serde(rename = "listingId")]
+    pub listing_id: String,
+    #[serde(rename = "listingType")]
+    pub listing_type: String,
+    pub owner: String,
+    #[serde(
+        rename = "packageRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub package_ref: Option<String>,
+    #[serde(rename = "pricingMode")]
+    pub pricing_mode: String,
+    #[serde(rename = "priceHint", default, skip_serializing_if = "Option::is_none")]
+    pub price_hint: Option<PriceV1>,
+    pub status: String,
+    #[serde(rename = "requiresLicense")]
+    pub requires_license: bool,
+    #[serde(rename = "evidenceRefs", default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(rename = "validationReportRefs", default)]
+    pub validation_report_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RegistryPermissionSummaryV1 {
     pub name: String,
     #[serde(default)]
@@ -86,10 +117,50 @@ pub struct RegistryEntryV1 {
     pub package_refs: Vec<RegistryPackageRef>,
     pub publisher: RegistryPublisher,
     pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub modalities: Vec<Modality>,
+    #[serde(rename = "supportedApis", default)]
+    pub supported_apis: Vec<ApiSurface>,
     pub targets: Vec<String>,
     pub engines: Vec<String>,
     pub license: LicenseInfo,
     pub trust: RegistryTrust,
+    #[serde(rename = "privacyTiers", default)]
+    pub privacy_tiers: Vec<PrivacyTier>,
+    #[serde(rename = "verificationTiers", default)]
+    pub verification_tiers: Vec<IntegrityTier>,
+    #[serde(rename = "browserRunnable", default)]
+    pub browser_runnable: bool,
+    #[serde(rename = "gpuRequired", default)]
+    pub gpu_required: bool,
+    #[serde(
+        rename = "minMemoryMb",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub min_memory_mb: Option<u64>,
+    #[serde(rename = "minVramMb", default, skip_serializing_if = "Option::is_none")]
+    pub min_vram_mb: Option<u64>,
+    #[serde(rename = "priceHint", default, skip_serializing_if = "Option::is_none")]
+    pub price_hint: Option<PriceV1>,
+    #[serde(
+        rename = "marketplaceListings",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub marketplace_listings: Vec<RegistryMarketplaceListingSummaryV1>,
+    #[serde(
+        rename = "runnerOfferRefs",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub runner_offer_refs: Vec<String>,
+    #[serde(
+        rename = "hardwareResourceOfferRefs",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub hardware_resource_offer_refs: Vec<String>,
     #[serde(default)]
     pub permissions: Vec<RegistryPermissionSummaryV1>,
     #[serde(rename = "policySummary", default = "default_policy_summary")]
@@ -109,15 +180,35 @@ pub struct RegistryQueryV1 {
     #[serde(default)]
     pub capability: Option<String>,
     #[serde(default)]
+    pub modality: Option<Modality>,
+    #[serde(rename = "apiSurface", default)]
+    pub api_surface: Option<ApiSurface>,
+    #[serde(default)]
+    pub publisher: Option<String>,
+    #[serde(default)]
     pub target: Option<String>,
     #[serde(default)]
     pub engine: Option<String>,
     #[serde(rename = "licenseType", default)]
     pub license_type: Option<String>,
+    #[serde(rename = "privacyTier", default)]
+    pub privacy_tier: Option<PrivacyTier>,
+    #[serde(rename = "verificationTier", default)]
+    pub verification_tier: Option<IntegrityTier>,
+    #[serde(rename = "maxArtifactBytes", default)]
+    pub max_artifact_bytes: Option<u64>,
+    #[serde(rename = "minArtifactBytes", default)]
+    pub min_artifact_bytes: Option<u64>,
+    #[serde(rename = "browserRunnable", default)]
+    pub browser_runnable: Option<bool>,
+    #[serde(rename = "gpuRequired", default)]
+    pub gpu_required: Option<bool>,
     #[serde(rename = "minValidatorScore", default)]
     pub min_validator_score: Option<f64>,
     #[serde(rename = "minBenchmarkScore", default)]
     pub min_benchmark_score: Option<f64>,
+    #[serde(rename = "maxPrice", default)]
+    pub max_price: Option<PriceV1>,
     #[serde(rename = "pageSize", default = "default_page_size")]
     pub page_size: usize,
     #[serde(default)]
@@ -177,6 +268,24 @@ impl RegistryEntryV1 {
             .sum();
         let package_ref = package_ref.into();
         let policy = evaluate_package_policy(manifest, package_ref.clone(), None);
+        let artifact_v2: Vec<_> = manifest
+            .artifact_groups
+            .iter()
+            .map(|group| artifact_group_v2_from_v1(&manifest.package_id, group))
+            .collect();
+        let min_memory_mb = artifact_v2
+            .iter()
+            .filter_map(|artifact| artifact.required_memory_mb)
+            .min();
+        let min_vram_mb = artifact_v2
+            .iter()
+            .filter_map(|artifact| artifact.required_vram_mb)
+            .min();
+        let browser_runnable = manifest
+            .artifact_groups
+            .iter()
+            .any(artifact_group_is_browser_runnable);
+        let gpu_required = min_vram_mb.is_some();
 
         Self {
             schema_version: "swarm-ai.registry.entry.v1".to_string(),
@@ -193,6 +302,8 @@ impl RegistryEntryV1 {
             }],
             publisher: RegistryPublisher::from(&manifest.publisher),
             capabilities: manifest.capabilities.clone(),
+            modalities: modalities_from_capabilities(&manifest.capabilities),
+            supported_apis: supported_apis_from_capabilities(&manifest.capabilities),
             targets,
             engines,
             license: manifest.license.clone(),
@@ -202,6 +313,16 @@ impl RegistryEntryV1 {
                 download_count_approx: 0,
                 curated: false,
             },
+            privacy_tiers: registry_privacy_tiers(manifest, browser_runnable),
+            verification_tiers: vec![IntegrityTier::ReceiptOnly],
+            browser_runnable,
+            gpu_required,
+            min_memory_mb,
+            min_vram_mb,
+            price_hint: None,
+            marketplace_listings: Vec::new(),
+            runner_offer_refs: Vec::new(),
+            hardware_resource_offer_refs: Vec::new(),
             permissions: manifest
                 .permissions
                 .iter()
@@ -233,10 +354,52 @@ impl From<&Publisher> for RegistryPublisher {
     }
 }
 
+fn artifact_group_is_browser_runnable(group: &ArtifactGroup) -> bool {
+    let target = group.target.to_ascii_lowercase();
+    let engine = group.engine.to_ascii_lowercase();
+    target.contains("browser")
+        || target.contains("wasm")
+        || engine.contains("wasm")
+        || engine.contains("webgpu")
+}
+
+fn registry_privacy_tiers(
+    manifest: &PackageManifestV1,
+    browser_runnable: bool,
+) -> Vec<PrivacyTier> {
+    let mut tiers = vec![PrivacyTier::Standard];
+    if browser_runnable
+        || manifest.artifact_groups.iter().any(|group| {
+            let target = group.target.to_ascii_lowercase();
+            target.contains("local") || target.contains("desktop")
+        })
+    {
+        push_unique(&mut tiers, PrivacyTier::LocalOnly);
+    }
+    if manifest.permissions.is_empty() {
+        push_unique(&mut tiers, PrivacyTier::NoLog);
+        push_unique(&mut tiers, PrivacyTier::RedactedInput);
+    }
+    if manifest.artifact_groups.iter().any(|group| {
+        let target = group.target.to_ascii_lowercase();
+        let engine = group.engine.to_ascii_lowercase();
+        target.contains("tee") || engine.contains("tee") || engine.contains("sgx")
+    }) {
+        push_unique(&mut tiers, PrivacyTier::TeeConfidential);
+    }
+    tiers
+}
+
 fn unique(mut items: Vec<String>) -> Vec<String> {
     items.sort();
     items.dedup();
     items
+}
+
+fn push_unique<T: PartialEq>(items: &mut Vec<T>, value: T) {
+    if !items.contains(&value) {
+        items.push(value);
+    }
 }
 
 fn registry_code_execution(manifest: &PackageManifestV1) -> String {

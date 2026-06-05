@@ -10,21 +10,32 @@ anyhow.workspace = true
 chrono.workspace = true
 hex.workspace = true
 hivemind-access = { path = "../access" }
+hivemind-batch = { path = "../batch" }
 hivemind-benchmarks = { path = "../benchmarks" }
 hivemind-browser-runner = { path = "../browser-runner" }
 hivemind-core = { path = "../core" }
+hivemind-evals = { path = "../evals" }
+hivemind-fine-tune = { path = "../fine-tune" }
+hivemind-identity = { path = "../identity" }
 hivemind-local-runner = { path = "../local-runner" }
 hivemind-marketplace = { path = "../marketplace" }
+hivemind-media = { path = "../media" }
+hivemind-moderation = { path = "../moderation" }
+hivemind-openai-compat = { path = "../openai-compat" }
 hivemind-package = { path = "../package" }
 hivemind-policy = { path = "../policy" }
 hivemind-publisher = { path = "../publisher" }
 hivemind-receipts = { path = "../receipts" }
+hivemind-realtime = { path = "../realtime" }
+hivemind-research = { path = "../research" }
 hivemind-registry = { path = "../registry" }
 hivemind-remote-runner = { path = "../remote-runner" }
 hivemind-router = { path = "../router" }
 hivemind-storage = { path = "../storage" }
 hivemind-validator = { path = "../validator" }
+hivemind-vector = { path = "../vector" }
 hivemind-weeb3-adapter = { path = "../weeb3-adapter" }
+hivemind-workflow = { path = "../workflow" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

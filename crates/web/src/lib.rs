@@ -4,7 +4,7 @@ use hivemind_browser_runner::{
 };
 use hivemind_core::{
     ExecutionOptions, ExecutionPrivacy, ExecutionRequestV1, PackageManifestV1, RegistryEntryV1,
-    RegistryQueryV1, RegistrySearchResponse, validate_package_manifest_value,
+    RegistryQueryV1, RegistrySearchResponse, TrustPolicyV1, validate_package_manifest_value,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -116,6 +116,172 @@ struct RunnerReputation {
     completed_jobs: u64,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct GovernanceStoreSummary {
+    #[serde(rename = "schemaVersion")]
+    schema_version: String,
+    root: String,
+    #[serde(rename = "policyCount")]
+    policy_count: usize,
+    #[serde(rename = "schemaReleaseCount")]
+    schema_release_count: usize,
+    #[serde(rename = "securityAdvisoryCount")]
+    security_advisory_count: usize,
+    #[serde(rename = "componentReadinessCount")]
+    component_readiness_count: usize,
+    #[serde(rename = "productionReadyComponentCount")]
+    production_ready_component_count: usize,
+    #[serde(rename = "blockedComponentCount")]
+    blocked_component_count: usize,
+    #[serde(rename = "criticalAdvisoryCount")]
+    critical_advisory_count: usize,
+    #[serde(rename = "emergencyActionCount")]
+    emergency_action_count: usize,
+    #[serde(rename = "recordCount")]
+    record_count: usize,
+    records: Vec<GovernanceRecordSummary>,
+    #[serde(rename = "generatedAt")]
+    generated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct GovernanceRecordSummary {
+    #[serde(rename = "recordId")]
+    record_id: String,
+    #[serde(rename = "recordType")]
+    record_type: String,
+    title: String,
+    #[serde(rename = "primaryActor")]
+    primary_actor: String,
+    status: String,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+    #[serde(rename = "signaturePresent")]
+    signature_present: bool,
+    path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct RegistryGovernanceSnapshot {
+    #[serde(rename = "schemaVersion")]
+    schema_version: String,
+    #[serde(rename = "schemaReleases", default)]
+    schema_releases: Vec<RegistrySchemaRelease>,
+    #[serde(rename = "componentReadiness", default)]
+    component_readiness: Vec<RegistryComponentReadiness>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct RegistrySchemaRelease {
+    #[serde(rename = "releaseId")]
+    release_id: String,
+    #[serde(rename = "objectType")]
+    object_type: String,
+    #[serde(rename = "releasedSchemaVersion")]
+    released_schema_version: String,
+    #[serde(rename = "interfaceVersion")]
+    interface_version: String,
+    status: String,
+    #[serde(rename = "breakingChange")]
+    breaking_change: bool,
+    #[serde(rename = "compatibilityTestRefs", default)]
+    compatibility_test_refs: Vec<String>,
+    #[serde(rename = "approvedBy", default)]
+    approved_by: Vec<String>,
+    #[serde(default)]
+    signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct RegistryComponentReadiness {
+    #[serde(rename = "readinessId")]
+    readiness_id: String,
+    #[serde(rename = "componentName")]
+    component_name: String,
+    #[serde(rename = "componentType")]
+    component_type: String,
+    owner: String,
+    status: String,
+    #[serde(rename = "schemaRefs", default)]
+    schema_refs: Vec<String>,
+    #[serde(rename = "apiSurfaces", default)]
+    api_surfaces: Vec<String>,
+    #[serde(rename = "supportedEnvironments", default)]
+    supported_environments: Vec<String>,
+    #[serde(default)]
+    blockers: Vec<String>,
+    #[serde(default)]
+    limitations: Vec<String>,
+    #[serde(default)]
+    signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct TrustPolicyEnvelopeResponse {
+    #[serde(rename = "trustPolicy")]
+    trust_policy: TrustPolicyV1,
+    verification: Value,
+    #[serde(default)]
+    signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct TrustPolicyStoreSummary {
+    #[serde(rename = "schemaVersion")]
+    schema_version: String,
+    root: String,
+    #[serde(rename = "policyCount")]
+    policy_count: usize,
+    #[serde(rename = "validCount")]
+    valid_count: usize,
+    #[serde(rename = "invalidCount")]
+    invalid_count: usize,
+    #[serde(rename = "signaturePresentCount")]
+    signature_present_count: usize,
+    #[serde(rename = "warningCount")]
+    warning_count: usize,
+    records: Vec<TrustPolicyRecordSummary>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct TrustPolicyRecordSummary {
+    #[serde(rename = "policyId")]
+    policy_id: String,
+    owner: String,
+    #[serde(rename = "privacyTiers")]
+    privacy_tiers: Vec<String>,
+    #[serde(rename = "verificationTiers")]
+    verification_tiers: Vec<String>,
+    #[serde(rename = "allowOpenMiners")]
+    allow_open_miners: bool,
+    #[serde(rename = "allowConsumerGpu")]
+    allow_consumer_gpu: bool,
+    #[serde(rename = "requireReceipt")]
+    require_receipt: bool,
+    #[serde(rename = "requireValidation")]
+    require_validation: bool,
+    #[serde(rename = "signaturePresent")]
+    signature_present: bool,
+    valid: bool,
+    #[serde(rename = "issueCount")]
+    issue_count: usize,
+    #[serde(rename = "warningCount")]
+    warning_count: usize,
+    path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+struct TrustPolicyLookup {
+    #[serde(rename = "schemaVersion")]
+    schema_version: String,
+    #[serde(rename = "policyId")]
+    policy_id: String,
+    path: String,
+    #[serde(rename = "trustPolicy")]
+    trust_policy: TrustPolicyV1,
+    verification: Value,
+}
+
 #[wasm_bindgen(start)]
 pub fn run() {
     yew::Renderer::<App>::new().render();
@@ -130,12 +296,19 @@ fn app() -> Html {
     let search_status = use_state(|| "Ready".to_string());
     let results = use_state(Vec::<RegistryEntryV1>::new);
     let registry_detail = use_state(|| "Package details will appear here".to_string());
+    let registry_governance_status = use_state(|| "Not loaded".to_string());
+    let registry_governance = use_state(|| None::<RegistryGovernanceSnapshot>);
     let registry_shards = use_state(Vec::<Value>::new);
     let registry_shard_manifest = use_state(|| None::<Value>);
     let manifest_text = use_state(|| DEFAULT_MANIFEST.to_string());
     let validation_text = use_state(|| "Validation has not run".to_string());
     let run_input = use_state(|| "hello world".to_string());
     let run_output = use_state(|| "Run output will appear here".to_string());
+    let local_only_trust = use_state(|| false);
+    let prepared_trust_policy = use_state(|| None::<TrustPolicyV1>);
+    let trust_policy_status = use_state(|| "Disabled".to_string());
+    let trust_store_status = use_state(|| "Not loaded".to_string());
+    let trust_policy_summary = use_state(|| None::<TrustPolicyStoreSummary>);
     let marketplace_status = use_state(|| "Ready".to_string());
     let marketplace_listings = use_state(Vec::<MarketplaceListing>::new);
     let marketplace_offers = use_state(Vec::<RunnerOffer>::new);
@@ -146,6 +319,13 @@ fn app() -> Html {
     let marketplace_resolution = use_state(|| None::<Value>);
     let marketplace_audit = use_state(|| None::<Value>);
     let marketplace_output = use_state(|| "Marketplace output will appear here".to_string());
+    let job_status = use_state(|| "Ready".to_string());
+    let job_audit = use_state(|| None::<Value>);
+    let selected_job_id = use_state(|| None::<String>);
+    let job_output = use_state(|| "Job audit output will appear here".to_string());
+    let governance_status = use_state(|| "Ready".to_string());
+    let governance_summary = use_state(|| None::<GovernanceStoreSummary>);
+    let governance_output = use_state(|| "Governance records will appear here".to_string());
     let execution_receipt = use_state(|| None::<Value>);
     let payer = use_state(|| "local-dev".to_string());
     let payee = use_state(|| "local-dev-runner".to_string());
@@ -156,6 +336,8 @@ fn app() -> Html {
         let health = health.clone();
         let health_error = health_error.clone();
         let browser_swarm = browser_swarm.clone();
+        let trust_store_status = trust_store_status.clone();
+        let trust_policy_summary = trust_policy_summary.clone();
         use_effect_with((), move |_| {
             spawn_local(async move {
                 match Request::get("/health").send().await {
@@ -169,6 +351,13 @@ fn app() -> Html {
                     if let Ok(value) = response.json::<BrowserSwarmStatusResponse>().await {
                         browser_swarm.set(Some(value));
                     }
+                }
+                match fetch_trust_policy_summary().await {
+                    Ok(summary) => {
+                        trust_store_status.set(format!("{} policy(s)", summary.policy_count));
+                        trust_policy_summary.set(Some(summary));
+                    }
+                    Err(_) => trust_store_status.set("Trust store unavailable".to_string()),
                 }
             });
             || ()
@@ -196,6 +385,119 @@ fn app() -> Html {
         Callback::from(move |event: InputEvent| {
             let input: HtmlInputElement = event.target_unchecked_into();
             run_input.set(input.value());
+        })
+    };
+
+    let on_local_only_trust_input = {
+        let local_only_trust = local_only_trust.clone();
+        let trust_policy_status = trust_policy_status.clone();
+        Callback::from(move |event: InputEvent| {
+            let input: HtmlInputElement = event.target_unchecked_into();
+            let checked = input.checked();
+            local_only_trust.set(checked);
+            trust_policy_status.set(if checked {
+                "Policy pending".to_string()
+            } else {
+                "Disabled".to_string()
+            });
+        })
+    };
+
+    let prepare_trust_policy = {
+        let local_only_trust = local_only_trust.clone();
+        let prepared_trust_policy = prepared_trust_policy.clone();
+        let trust_policy_status = trust_policy_status.clone();
+        let trust_store_status = trust_store_status.clone();
+        let trust_policy_summary = trust_policy_summary.clone();
+        let run_output = run_output.clone();
+        Callback::from(move |_| {
+            let local_only_trust = local_only_trust.clone();
+            let prepared_trust_policy = prepared_trust_policy.clone();
+            let trust_policy_status = trust_policy_status.clone();
+            let trust_store_status = trust_store_status.clone();
+            let trust_policy_summary = trust_policy_summary.clone();
+            let run_output = run_output.clone();
+            spawn_local(async move {
+                trust_policy_status.set("Preparing".to_string());
+                match fetch_signed_local_only_trust_policy().await {
+                    Ok(envelope) => {
+                        let policy = envelope.trust_policy;
+                        local_only_trust.set(true);
+                        prepared_trust_policy.set(Some(policy.clone()));
+                        trust_policy_status.set(trust_policy_status_label(&policy));
+                        run_output.set(pretty_json(&json!({
+                            "trustPolicy": policy,
+                            "signature": envelope.signature,
+                            "verification": envelope.verification
+                        })));
+                        if let Ok(summary) = fetch_trust_policy_summary().await {
+                            trust_store_status.set(format!("{} policy(s)", summary.policy_count));
+                            trust_policy_summary.set(Some(summary));
+                        }
+                    }
+                    Err(error) => {
+                        trust_policy_status.set("Policy failed".to_string());
+                        run_output.set(error);
+                    }
+                }
+            });
+        })
+    };
+
+    let load_trust_policies = {
+        let trust_store_status = trust_store_status.clone();
+        let trust_policy_summary = trust_policy_summary.clone();
+        let run_output = run_output.clone();
+        Callback::from(move |_| {
+            let trust_store_status = trust_store_status.clone();
+            let trust_policy_summary = trust_policy_summary.clone();
+            let run_output = run_output.clone();
+            spawn_local(async move {
+                trust_store_status.set("Loading".to_string());
+                match fetch_trust_policy_summary().await {
+                    Ok(summary) => {
+                        trust_store_status.set(format!("{} policy(s)", summary.policy_count));
+                        run_output.set(pretty_json(&json!(summary)));
+                        trust_policy_summary.set(Some(summary));
+                    }
+                    Err(error) => {
+                        trust_store_status.set("Trust store failed".to_string());
+                        run_output.set(error);
+                    }
+                }
+            });
+        })
+    };
+
+    let select_trust_policy = {
+        let local_only_trust = local_only_trust.clone();
+        let prepared_trust_policy = prepared_trust_policy.clone();
+        let trust_policy_status = trust_policy_status.clone();
+        let trust_store_status = trust_store_status.clone();
+        let run_output = run_output.clone();
+        Callback::from(move |policy_id: String| {
+            let local_only_trust = local_only_trust.clone();
+            let prepared_trust_policy = prepared_trust_policy.clone();
+            let trust_policy_status = trust_policy_status.clone();
+            let trust_store_status = trust_store_status.clone();
+            let run_output = run_output.clone();
+            spawn_local(async move {
+                trust_store_status.set("Loading policy".to_string());
+                match fetch_trust_policy_lookup(&policy_id).await {
+                    Ok(lookup) => {
+                        let policy = lookup.trust_policy.clone();
+                        local_only_trust.set(true);
+                        prepared_trust_policy.set(Some(policy.clone()));
+                        trust_policy_status.set(trust_policy_status_label(&policy));
+                        trust_store_status.set("Policy selected".to_string());
+                        run_output.set(pretty_json(&json!(lookup)));
+                    }
+                    Err(error) => {
+                        trust_store_status.set("Lookup failed".to_string());
+                        run_output.set(error);
+                    }
+                }
+            });
         })
     };
 
@@ -245,11 +547,21 @@ fn app() -> Html {
                     schema_version: "swarm-ai.registry.query.v1".to_string(),
                     kind: None,
                     capability: (!capability.trim().is_empty()).then_some(capability),
+                    modality: None,
+                    api_surface: None,
+                    publisher: None,
                     target: None,
                     engine: None,
                     license_type: None,
+                    privacy_tier: None,
+                    verification_tier: None,
+                    max_artifact_bytes: None,
+                    min_artifact_bytes: None,
+                    browser_runnable: None,
+                    gpu_required: None,
                     min_validator_score: None,
                     min_benchmark_score: None,
+                    max_price: None,
                     page_size: 20,
                     cursor: None,
                     requester: None,
@@ -302,6 +614,35 @@ fn app() -> Html {
                         Err(error) => registry_detail.set(error.to_string()),
                     },
                     Err(error) => registry_detail.set(error.to_string()),
+                }
+            });
+        })
+    };
+
+    let load_registry_governance = {
+        let registry_governance_status = registry_governance_status.clone();
+        let registry_governance = registry_governance.clone();
+        let registry_detail = registry_detail.clone();
+        Callback::from(move |_| {
+            let registry_governance_status = registry_governance_status.clone();
+            let registry_governance = registry_governance.clone();
+            let registry_detail = registry_detail.clone();
+            spawn_local(async move {
+                registry_governance_status.set("Loading".to_string());
+                match fetch_registry_governance_snapshot().await {
+                    Ok(snapshot) => {
+                        registry_governance_status.set(format!(
+                            "{} schema(s), {} readiness record(s)",
+                            snapshot.schema_releases.len(),
+                            snapshot.component_readiness.len()
+                        ));
+                        registry_detail.set(pretty_json(&json!(&snapshot)));
+                        registry_governance.set(Some(snapshot));
+                    }
+                    Err(error) => {
+                        registry_governance_status.set("Governance unavailable".to_string());
+                        registry_detail.set(error);
+                    }
                 }
             });
         })
@@ -1651,6 +1992,344 @@ fn app() -> Html {
         })
     };
 
+    let load_jobs = {
+        let job_status = job_status.clone();
+        let selected_job_id = selected_job_id.clone();
+        let job_output = job_output.clone();
+        Callback::from(move |_| {
+            let job_status = job_status.clone();
+            let selected_job_id = selected_job_id.clone();
+            let job_output = job_output.clone();
+            spawn_local(async move {
+                job_status.set("Loading jobs".to_string());
+                match fetch_jobs_summary().await {
+                    Ok(value) => {
+                        let jobs = value.get("jobCount").and_then(Value::as_u64).unwrap_or(0);
+                        let first_job_id = first_job_id(&value);
+                        selected_job_id.set(first_job_id.clone());
+                        job_status.set(match first_job_id {
+                            Some(job_id) => format!("{jobs} job record(s), selected {job_id}"),
+                            None => format!("{jobs} job record(s)"),
+                        });
+                        job_output.set(pretty_json(&value));
+                    }
+                    Err(error) => {
+                        job_status.set("Job list failed".to_string());
+                        job_output.set(error);
+                    }
+                }
+            });
+        })
+    };
+
+    let load_job_lifecycle = {
+        let job_status = job_status.clone();
+        let selected_job_id = selected_job_id.clone();
+        let job_output = job_output.clone();
+        Callback::from(move |_| {
+            let job_status = job_status.clone();
+            let selected_job_id = selected_job_id.clone();
+            let job_output = job_output.clone();
+            spawn_local(async move {
+                job_status.set("Loading lifecycle".to_string());
+                let job_id = match (*selected_job_id).clone() {
+                    Some(job_id) => Some(job_id),
+                    None => match fetch_jobs_summary().await {
+                        Ok(summary) => {
+                            let first = first_job_id(&summary);
+                            selected_job_id.set(first.clone());
+                            first
+                        }
+                        Err(error) => {
+                            job_status.set("Lifecycle failed".to_string());
+                            job_output.set(error);
+                            return;
+                        }
+                    },
+                };
+                let Some(job_id) = job_id else {
+                    job_status.set("No jobs".to_string());
+                    job_output.set("No local job records are available".to_string());
+                    return;
+                };
+                match fetch_job_lifecycle(&job_id).await {
+                    Ok(value) => {
+                        let complete = value
+                            .get("completedStageCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        let blocked = value
+                            .get("blockedStageCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        job_status.set(format!("{job_id}: {complete} complete, {blocked} blocked"));
+                        job_output.set(pretty_json(&value));
+                    }
+                    Err(error) => {
+                        job_status.set("Lifecycle failed".to_string());
+                        job_output.set(error);
+                    }
+                }
+            });
+        })
+    };
+
+    let load_job_audit = {
+        let job_status = job_status.clone();
+        let job_audit = job_audit.clone();
+        let job_output = job_output.clone();
+        Callback::from(move |_| {
+            let job_status = job_status.clone();
+            let job_audit = job_audit.clone();
+            let job_output = job_output.clone();
+            spawn_local(async move {
+                job_status.set("Auditing jobs".to_string());
+                match post_job_store_audit("/v1/hivemind/jobs/audit", "Job audit").await {
+                    Ok(value) => {
+                        let jobs = value.get("jobCount").and_then(Value::as_u64).unwrap_or(0);
+                        let stale = value
+                            .get("staleJobCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        job_status.set(format!("{jobs} job(s), {stale} stale"));
+                        job_audit.set(Some(value.clone()));
+                        job_output.set(pretty_json(&value));
+                    }
+                    Err(error) => {
+                        job_status.set("Job audit failed".to_string());
+                        job_output.set(error);
+                    }
+                }
+            });
+        })
+    };
+
+    let load_job_lifecycle_audit = {
+        let job_status = job_status.clone();
+        let job_audit = job_audit.clone();
+        let job_output = job_output.clone();
+        Callback::from(move |_| {
+            let job_status = job_status.clone();
+            let job_audit = job_audit.clone();
+            let job_output = job_output.clone();
+            spawn_local(async move {
+                job_status.set("Auditing lifecycles".to_string());
+                match post_job_store_audit(
+                    "/v1/hivemind/jobs/lifecycle-audit",
+                    "Job lifecycle audit",
+                )
+                .await
+                {
+                    Ok(value) => {
+                        let jobs = value.get("jobCount").and_then(Value::as_u64).unwrap_or(0);
+                        let ready = value
+                            .get("readyForSettlementCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        let action = value
+                            .get("requiresOperatorActionCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        let blocked = value
+                            .get("blockedJobCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        job_status.set(format!(
+                            "{jobs} lifecycle(s), {ready} ready, {action} action, {blocked} blocked"
+                        ));
+                        job_audit.set(Some(value.clone()));
+                        job_output.set(pretty_json(&value));
+                    }
+                    Err(error) => {
+                        job_status.set("Lifecycle audit failed".to_string());
+                        job_output.set(error);
+                    }
+                }
+            });
+        })
+    };
+
+    let load_route_trace_audit = {
+        let job_status = job_status.clone();
+        let job_audit = job_audit.clone();
+        let job_output = job_output.clone();
+        Callback::from(move |_| {
+            let job_status = job_status.clone();
+            let job_audit = job_audit.clone();
+            let job_output = job_output.clone();
+            spawn_local(async move {
+                job_status.set("Loading route traces".to_string());
+                match fetch_route_trace_summary().await {
+                    Ok(value) => {
+                        let traces = value.get("traceCount").and_then(Value::as_u64).unwrap_or(0);
+                        let fallback = value
+                            .get("fallbackTraceCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        job_status.set(format!("{traces} trace(s), {fallback} fallback"));
+                        job_audit.set(Some(value.clone()));
+                        job_output.set(pretty_json(&value));
+                    }
+                    Err(error) => {
+                        job_status.set("Route traces failed".to_string());
+                        job_output.set(error);
+                    }
+                }
+            });
+        })
+    };
+
+    let load_route_decision_audit = {
+        let job_status = job_status.clone();
+        let job_audit = job_audit.clone();
+        let job_output = job_output.clone();
+        Callback::from(move |_| {
+            let job_status = job_status.clone();
+            let job_audit = job_audit.clone();
+            let job_output = job_output.clone();
+            spawn_local(async move {
+                job_status.set("Loading route decisions".to_string());
+                match fetch_route_decision_summary().await {
+                    Ok(value) => {
+                        let decisions = value
+                            .get("decisionCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        let selected = value
+                            .get("withSelectedRouteCount")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0);
+                        job_status.set(format!("{decisions} decision(s), {selected} selected"));
+                        job_audit.set(Some(value.clone()));
+                        job_output.set(pretty_json(&value));
+                    }
+                    Err(error) => {
+                        job_status.set("Route decisions failed".to_string());
+                        job_output.set(error);
+                    }
+                }
+            });
+        })
+    };
+
+    let expire_jobs = {
+        let job_status = job_status.clone();
+        let job_output = job_output.clone();
+        Callback::from(move |_| {
+            let job_status = job_status.clone();
+            let job_output = job_output.clone();
+            spawn_local(async move {
+                job_status.set("Expiring stale jobs".to_string());
+                let payload = json!({
+                    "schemaVersion": "swarm-ai.job-expiration-sweep-request.v1"
+                });
+                let request_builder = Request::post("/v1/hivemind/jobs/expire")
+                    .header("Content-Type", "application/json")
+                    .json(&payload);
+                let Ok(request_builder) = request_builder else {
+                    job_status.set("Job expiration failed".to_string());
+                    job_output.set("Could not serialize job expiration request".to_string());
+                    return;
+                };
+                match request_builder.send().await {
+                    Ok(response) => match response.json::<Value>().await {
+                        Ok(value) => {
+                            let expired = value
+                                .get("expiredJobCount")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(0);
+                            job_status.set(format!("{expired} expired job(s)"));
+                            job_output.set(pretty_json(&value));
+                        }
+                        Err(error) => {
+                            job_status.set("Job expiration failed".to_string());
+                            job_output.set(error.to_string());
+                        }
+                    },
+                    Err(error) => {
+                        job_status.set("Job expiration failed".to_string());
+                        job_output.set(error.to_string());
+                    }
+                }
+            });
+        })
+    };
+
+    let load_governance_records = {
+        let governance_status = governance_status.clone();
+        let governance_summary = governance_summary.clone();
+        let governance_output = governance_output.clone();
+        Callback::from(move |_| {
+            let governance_status = governance_status.clone();
+            let governance_summary = governance_summary.clone();
+            let governance_output = governance_output.clone();
+            spawn_local(async move {
+                governance_status.set("Loading records".to_string());
+                match Request::get("/v1/governance/records").send().await {
+                    Ok(response) => match response.json::<Value>().await {
+                        Ok(value) => {
+                            match serde_json::from_value::<GovernanceStoreSummary>(value.clone()) {
+                                Ok(summary) => {
+                                    governance_status.set(format!(
+                                        "{} record(s), {} emergency",
+                                        summary.record_count, summary.emergency_action_count
+                                    ));
+                                    governance_summary.set(Some(summary));
+                                    governance_output.set(pretty_json(&value));
+                                }
+                                Err(error) => {
+                                    governance_status.set("Record load failed".to_string());
+                                    governance_output.set(error.to_string());
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            governance_status.set("Record load failed".to_string());
+                            governance_output.set(error.to_string());
+                        }
+                    },
+                    Err(error) => {
+                        governance_status.set("Record load failed".to_string());
+                        governance_output.set(error.to_string());
+                    }
+                }
+            });
+        })
+    };
+
+    let load_governance_record = {
+        let governance_status = governance_status.clone();
+        let governance_output = governance_output.clone();
+        Callback::from(move |record_id: String| {
+            let governance_status = governance_status.clone();
+            let governance_output = governance_output.clone();
+            spawn_local(async move {
+                governance_status.set("Loading record".to_string());
+                let url = format!("/v1/governance/records/{record_id}");
+                match Request::get(&url).send().await {
+                    Ok(response) => match response.json::<Value>().await {
+                        Ok(value) => {
+                            let record_type = value
+                                .get("recordType")
+                                .and_then(Value::as_str)
+                                .unwrap_or("record");
+                            governance_status.set(format!("Loaded {record_type}"));
+                            governance_output.set(pretty_json(&value));
+                        }
+                        Err(error) => {
+                            governance_status.set("Record lookup failed".to_string());
+                            governance_output.set(error.to_string());
+                        }
+                    },
+                    Err(error) => {
+                        governance_status.set("Record lookup failed".to_string());
+                        governance_output.set(error.to_string());
+                    }
+                }
+            });
+        })
+    };
+
     let validate = {
         let manifest_text = manifest_text.clone();
         let validation_text = validation_text.clone();
@@ -1877,6 +2556,9 @@ fn app() -> Html {
         let run_input = run_input.clone();
         let run_output = run_output.clone();
         let execution_receipt = execution_receipt.clone();
+        let local_only_trust = local_only_trust.clone();
+        let prepared_trust_policy = prepared_trust_policy.clone();
+        let trust_policy_status = trust_policy_status.clone();
         Callback::from(move |_| {
             let Some(entry) = results.first().cloned() else {
                 run_output.set("Search returned no runnable package".to_string());
@@ -1905,12 +2587,31 @@ fn app() -> Html {
                 access_grant: None,
                 access_revocation_list: None,
             };
+            let local_only_enabled = *local_only_trust;
+            let cached_trust_policy = (*prepared_trust_policy).clone();
             let run_output = run_output.clone();
             let execution_receipt = execution_receipt.clone();
+            let prepared_trust_policy = prepared_trust_policy.clone();
+            let trust_policy_status = trust_policy_status.clone();
             spawn_local(async move {
+                let trust_policy = match ensure_local_only_trust_policy(
+                    local_only_enabled,
+                    cached_trust_policy,
+                    &prepared_trust_policy,
+                    &trust_policy_status,
+                )
+                .await
+                {
+                    Ok(policy) => policy,
+                    Err(error) => {
+                        run_output.set(error);
+                        return;
+                    }
+                };
+                let body = route_planner_body(&request, trust_policy.as_ref());
                 let request_builder = Request::post("/v1/swarm-ai/execute")
                     .header("Content-Type", "application/json")
-                    .json(&request);
+                    .json(&body);
                 let Ok(request_builder) = request_builder else {
                     run_output.set("Could not serialize execution request".to_string());
                     return;
@@ -1940,6 +2641,9 @@ fn app() -> Html {
         let results = results.clone();
         let run_input = run_input.clone();
         let run_output = run_output.clone();
+        let local_only_trust = local_only_trust.clone();
+        let prepared_trust_policy = prepared_trust_policy.clone();
+        let trust_policy_status = trust_policy_status.clone();
         Callback::from(move |_| {
             let Some(entry) = results.first().cloned() else {
                 run_output.set("Search returned no routable package".to_string());
@@ -1963,11 +2667,30 @@ fn app() -> Html {
                 access_grant: None,
                 access_revocation_list: None,
             };
+            let local_only_enabled = *local_only_trust;
+            let cached_trust_policy = (*prepared_trust_policy).clone();
             let run_output = run_output.clone();
+            let prepared_trust_policy = prepared_trust_policy.clone();
+            let trust_policy_status = trust_policy_status.clone();
             spawn_local(async move {
+                let trust_policy = match ensure_local_only_trust_policy(
+                    local_only_enabled,
+                    cached_trust_policy,
+                    &prepared_trust_policy,
+                    &trust_policy_status,
+                )
+                .await
+                {
+                    Ok(policy) => policy,
+                    Err(error) => {
+                        run_output.set(error);
+                        return;
+                    }
+                };
+                let body = route_planner_body(&request, trust_policy.as_ref());
                 let request_builder = Request::post("/v1/swarm-ai/route-report")
                     .header("Content-Type", "application/json")
-                    .json(&request);
+                    .json(&body);
                 let Ok(request_builder) = request_builder else {
                     run_output.set("Could not serialize route request".to_string());
                     return;
@@ -2059,6 +2782,9 @@ fn app() -> Html {
                 .map(|error| format!("API error: {error}"))
         })
         .unwrap_or_else(|| "Connecting".to_string());
+    let trust_policy_summary_view = (*trust_policy_summary).clone();
+    let governance_summary_view = (*governance_summary).clone();
+    let registry_governance_view = (*registry_governance).clone();
 
     html! {
         <main class="app-shell">
@@ -2076,6 +2802,7 @@ fn app() -> Html {
                         <h2>{"Registry"}</h2>
                         <div class="registry-actions">
                             <span>{(*search_status).clone()}</span>
+                            <button type="button" onclick={load_registry_governance}>{"Governance"}</button>
                             <button type="button" onclick={load_registry_shards}>{"Shards"}</button>
                             <button type="button" onclick={load_registry_manifest}>{"Manifest"}</button>
                             <button type="button" onclick={compare_registry_manifest}>{"Compare Manifest"}</button>
@@ -2087,6 +2814,16 @@ fn app() -> Html {
                         <span>{"Capability"}</span>
                         <input value={(*capability).clone()} oninput={on_capability_input} />
                     </label>
+                    <div class="registry-governance-status">
+                        <span>{(*registry_governance_status).clone()}</span>
+                    </div>
+                    {
+                        if let Some(snapshot) = registry_governance_view.as_ref() {
+                            registry_governance_view_panel(snapshot)
+                        } else {
+                            html! {}
+                        }
+                    }
                     <div class="package-list">
                         { for results.iter().map(|entry| package_row(entry, &load_registry_package)) }
                     </div>
@@ -2114,6 +2851,8 @@ fn app() -> Html {
                     <div class="panel-header">
                         <h2>{"Runner"}</h2>
                         <div class="button-row">
+                            <button type="button" onclick={prepare_trust_policy}>{"Prepare Policy"}</button>
+                            <button type="button" onclick={load_trust_policies}>{"Trust Store"}</button>
                             <button type="button" onclick={route}>{"Route"}</button>
                             <button type="button" onclick={run}>{"Run API"}</button>
                             <button type="button" onclick={run_browser}>{"Run Browser"}</button>
@@ -2123,7 +2862,82 @@ fn app() -> Html {
                         <span>{"Input"}</span>
                         <input value={(*run_input).clone()} oninput={on_run_input} />
                     </label>
+                    <label class="check-field">
+                        <input type="checkbox" checked={*local_only_trust} oninput={on_local_only_trust_input} />
+                        <span>{"Apply prepared trust policy"}</span>
+                    </label>
+                    <div class="trust-strip">
+                        <span>{(*trust_policy_status).clone()}</span>
+                        <span>{(*trust_store_status).clone()}</span>
+                    </div>
+                    {
+                        if let Some(summary) = trust_policy_summary_view.as_ref() {
+                            trust_policy_summary_strip(summary)
+                        } else {
+                            html! {}
+                        }
+                    }
+                    <div class="trust-list">
+                    {
+                        if let Some(summary) = trust_policy_summary_view.as_ref() {
+                            html! { for summary.records.iter().map(|record| trust_policy_row(record, &select_trust_policy)) }
+                        } else {
+                            html! {}
+                        }
+                    }
+                    </div>
                     <pre class="output runner-output">{(*run_output).clone()}</pre>
+                </section>
+
+                <section class="panel jobs-panel">
+                    <div class="panel-header">
+                        <h2>{"Jobs"}</h2>
+                        <span>{(*job_status).clone()}</span>
+                    </div>
+                    <div class="button-row jobs-actions">
+                        <button type="button" onclick={load_jobs}>{"List"}</button>
+                        <button type="button" onclick={load_job_lifecycle}>{"Lifecycle"}</button>
+                        <button type="button" onclick={load_job_lifecycle_audit}>{"Lifecycle Audit"}</button>
+                        <button type="button" onclick={load_job_audit}>{"Audit"}</button>
+                        <button type="button" onclick={load_route_decision_audit}>{"Route Decisions"}</button>
+                        <button type="button" onclick={load_route_trace_audit}>{"Route Traces"}</button>
+                        <button type="button" onclick={expire_jobs}>{"Expire"}</button>
+                    </div>
+                    {
+                        if let Some(audit) = (*job_audit).as_ref() {
+                            job_audit_summary(audit)
+                        } else {
+                            html! {}
+                        }
+                    }
+                    <pre class="output job-output">{(*job_output).clone()}</pre>
+                </section>
+
+                <section class="panel governance-panel">
+                    <div class="panel-header">
+                        <h2>{"Governance"}</h2>
+                        <span>{(*governance_status).clone()}</span>
+                    </div>
+                    <div class="button-row governance-actions">
+                        <button type="button" onclick={load_governance_records}>{"Load"}</button>
+                    </div>
+                    {
+                        if let Some(summary) = governance_summary_view.as_ref() {
+                            governance_summary_strip(summary)
+                        } else {
+                            html! {}
+                        }
+                    }
+                    <div class="governance-list">
+                    {
+                        if let Some(summary) = governance_summary_view.as_ref() {
+                            html! { for summary.records.iter().map(|record| governance_record_row(record, &load_governance_record)) }
+                        } else {
+                            html! {}
+                        }
+                    }
+                    </div>
+                    <pre class="output governance-output">{(*governance_output).clone()}</pre>
                 </section>
 
                 <section class="panel marketplace-panel">
@@ -2201,6 +3015,210 @@ fn pretty_json(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|error| error.to_string())
 }
 
+async fn ensure_local_only_trust_policy(
+    local_only_enabled: bool,
+    cached_policy: Option<TrustPolicyV1>,
+    prepared_trust_policy: &UseStateHandle<Option<TrustPolicyV1>>,
+    trust_policy_status: &UseStateHandle<String>,
+) -> Result<Option<TrustPolicyV1>, String> {
+    if !local_only_enabled {
+        return Ok(None);
+    }
+    if let Some(policy) = cached_policy {
+        return Ok(Some(policy));
+    }
+    trust_policy_status.set("Preparing".to_string());
+    let envelope = fetch_signed_local_only_trust_policy().await?;
+    let policy = envelope.trust_policy;
+    prepared_trust_policy.set(Some(policy.clone()));
+    trust_policy_status.set(trust_policy_status_label(&policy));
+    Ok(Some(policy))
+}
+
+async fn fetch_signed_local_only_trust_policy() -> Result<TrustPolicyEnvelopeResponse, String> {
+    let body = json!({
+        "owner": "web-dashboard",
+        "sign": true
+    });
+    let request_builder = Request::post("/v1/policy/trust/local-only")
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .map_err(|error| error.to_string())?;
+    let response = request_builder
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Trust policy request failed with HTTP {status}: {text}"
+        ));
+    }
+    response
+        .json::<TrustPolicyEnvelopeResponse>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn fetch_trust_policy_summary() -> Result<TrustPolicyStoreSummary, String> {
+    let response = Request::get("/v1/policy/trust")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Trust policy store request failed with HTTP {status}: {text}"
+        ));
+    }
+    response
+        .json::<TrustPolicyStoreSummary>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn fetch_trust_policy_lookup(policy_id: &str) -> Result<TrustPolicyLookup, String> {
+    let response = Request::get(&format!("/v1/policy/trust/{policy_id}"))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Trust policy lookup failed with HTTP {status}: {text}"
+        ));
+    }
+    response
+        .json::<TrustPolicyLookup>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn fetch_jobs_summary() -> Result<Value, String> {
+    let response = Request::get("/v1/hivemind/jobs")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("Jobs request failed with HTTP {status}: {text}"));
+    }
+    response
+        .json::<Value>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn fetch_route_trace_summary() -> Result<Value, String> {
+    let response = Request::get("/v1/hivemind/route-traces")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Route trace request failed with HTTP {status}: {text}"
+        ));
+    }
+    response
+        .json::<Value>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn fetch_route_decision_summary() -> Result<Value, String> {
+    let response = Request::get("/v1/hivemind/route-decisions")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Route decision request failed with HTTP {status}: {text}"
+        ));
+    }
+    response
+        .json::<Value>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn fetch_job_lifecycle(job_id: &str) -> Result<Value, String> {
+    let response = Request::get(&format!("/v1/hivemind/jobs/{job_id}/lifecycle"))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Job lifecycle request failed with HTTP {status}: {text}"
+        ));
+    }
+    response
+        .json::<Value>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn post_job_store_audit(path: &str, label: &str) -> Result<Value, String> {
+    let payload = json!({
+        "schemaVersion": "swarm-ai.job-store-audit-request.v1"
+    });
+    let request = Request::post(path)
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .map_err(|error| format!("Could not serialize {label} request: {error}"))?;
+    let response = request.send().await.map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("{label} failed with HTTP {status}: {text}"));
+    }
+    response
+        .json::<Value>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+fn first_job_id(summary: &Value) -> Option<String> {
+    summary
+        .get("jobs")
+        .and_then(Value::as_array)
+        .and_then(|jobs| jobs.first())
+        .and_then(|job| job.get("jobId"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn trust_policy_status_label(policy: &TrustPolicyV1) -> String {
+    let signature = if policy.signature.is_some() {
+        "signed"
+    } else {
+        "unsigned"
+    };
+    format!("{} {}", signature, policy.policy_id)
+}
+
+fn route_planner_body(request: &ExecutionRequestV1, trust_policy: Option<&TrustPolicyV1>) -> Value {
+    let Some(trust_policy) = trust_policy else {
+        return json!(request);
+    };
+    json!({
+        "schemaVersion": "swarm-ai.route-planner-request.v1",
+        "request": request,
+        "policyMode": "balanced",
+        "maxMarketplaceResults": 3,
+        "trustPolicy": trust_policy,
+    })
+}
+
 async fn fetch_registry_shards() -> Result<Vec<Value>, String> {
     Request::get("/v1/registry/shards")
         .send()
@@ -2217,6 +3235,24 @@ async fn fetch_registry_shard_manifest() -> Result<Value, String> {
         .await
         .map_err(|error| error.to_string())?
         .json::<Value>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn fetch_registry_governance_snapshot() -> Result<RegistryGovernanceSnapshot, String> {
+    let response = Request::get("/v1/registry/snapshot")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !response.ok() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Registry snapshot request failed with HTTP {status}: {text}"
+        ));
+    }
+    response
+        .json::<RegistryGovernanceSnapshot>()
         .await
         .map_err(|error| error.to_string())
 }
@@ -2244,7 +3280,192 @@ fn signature_label(signature: &Option<String>) -> &'static str {
     }
 }
 
+fn compact_list(values: &[String]) -> String {
+    if values.is_empty() {
+        "none".to_string()
+    } else {
+        values.join(", ")
+    }
+}
+
+fn registry_governance_view_panel(snapshot: &RegistryGovernanceSnapshot) -> Html {
+    let production_schema_count = snapshot
+        .schema_releases
+        .iter()
+        .filter(|release| release.status == "production-approved")
+        .count();
+    let production_component_count = snapshot
+        .component_readiness
+        .iter()
+        .filter(|readiness| readiness.status == "production")
+        .count();
+    let blocked_component_count = snapshot
+        .component_readiness
+        .iter()
+        .filter(|readiness| !readiness.blockers.is_empty())
+        .count();
+    html! {
+        <section class="registry-governance">
+            <div class="audit-strip">
+                <span>{format!("{} schema releases", snapshot.schema_releases.len())}</span>
+                <span>{format!("{production_schema_count} production")}</span>
+                <span>{format!("{} readiness", snapshot.component_readiness.len())}</span>
+                <span>{format!("{production_component_count} production-ready")}</span>
+                <span>{format!("{blocked_component_count} blocked")}</span>
+            </div>
+            <div class="registry-governance-list">
+                { for snapshot.schema_releases.iter().map(schema_release_row) }
+                { for snapshot.component_readiness.iter().map(component_readiness_row) }
+            </div>
+        </section>
+    }
+}
+
+fn schema_release_row(release: &RegistrySchemaRelease) -> Html {
+    let tests = release.compatibility_test_refs.len();
+    let approvers = compact_list(&release.approved_by);
+    let change = if release.breaking_change {
+        "breaking"
+    } else {
+        "compatible"
+    };
+    html! {
+        <article class="registry-governance-row schema-release-row">
+            <strong>{release.object_type.clone()}</strong>
+            <small>{format!("{} | interface {} | {}", release.released_schema_version, release.interface_version, release.status)}</small>
+            <small>{format!("{change} | {tests} compatibility test(s) | approvers {approvers}")}</small>
+            <small>{format!("signature {} | {}", signature_label(&release.signature), release.release_id)}</small>
+        </article>
+    }
+}
+
+fn component_readiness_row(readiness: &RegistryComponentReadiness) -> Html {
+    let api_surfaces = compact_list(&readiness.api_surfaces);
+    let environments = compact_list(&readiness.supported_environments);
+    let schemas = readiness.schema_refs.len();
+    let blocker_label = if readiness.blockers.is_empty() {
+        "no blockers".to_string()
+    } else {
+        format!("{} blocker(s)", readiness.blockers.len())
+    };
+    html! {
+        <article class="registry-governance-row component-readiness-row">
+            <strong>{readiness.component_name.clone()}</strong>
+            <small>{format!("{} | {} | owner {}", readiness.component_type, readiness.status, readiness.owner)}</small>
+            <small>{format!("apis {api_surfaces} | env {environments} | {schemas} schema ref(s)")}</small>
+            <small>{format!("{blocker_label} | signature {} | {}", signature_label(&readiness.signature), readiness.readiness_id)}</small>
+        </article>
+    }
+}
+
+fn trust_policy_summary_strip(summary: &TrustPolicyStoreSummary) -> Html {
+    html! {
+        <div class="audit-strip">
+            <span>{format!("{} policies", summary.policy_count)}</span>
+            <span>{format!("{} valid", summary.valid_count)}</span>
+            <span>{format!("{} invalid", summary.invalid_count)}</span>
+            <span>{format!("{} signed", summary.signature_present_count)}</span>
+            <span>{format!("{} warnings", summary.warning_count)}</span>
+        </div>
+    }
+}
+
+fn trust_policy_row(
+    record: &TrustPolicyRecordSummary,
+    select_trust_policy: &Callback<String>,
+) -> Html {
+    let policy_id = record.policy_id.clone();
+    let onclick = {
+        let select_trust_policy = select_trust_policy.clone();
+        Callback::from(move |_| select_trust_policy.emit(policy_id.clone()))
+    };
+    let privacy = if record.privacy_tiers.is_empty() {
+        "none".to_string()
+    } else {
+        record.privacy_tiers.join(", ")
+    };
+    let verification = if record.verification_tiers.is_empty() {
+        "none".to_string()
+    } else {
+        record.verification_tiers.join(", ")
+    };
+    let validity = if record.valid { "valid" } else { "invalid" };
+    let signature = if record.signature_present {
+        "signed"
+    } else {
+        "unsigned"
+    };
+    let marketplace = if record.allow_open_miners {
+        "open miners"
+    } else {
+        "curated runners"
+    };
+    html! {
+        <article class="trust-row">
+            <div class="trust-row-top">
+                <div>
+                    <strong>{record.owner.clone()}</strong>
+                    <small>{record.policy_id.clone()}</small>
+                    <small>{format!("{} | {} | {} issue(s), {} warning(s)", validity, signature, record.issue_count, record.warning_count)}</small>
+                    <small>{format!("privacy {} | integrity {}", privacy, verification)}</small>
+                    <small>{format!("{} | consumer GPU {} | receipt {} | validation {}", marketplace, record.allow_consumer_gpu, record.require_receipt, record.require_validation)}</small>
+                </div>
+                <button type="button" onclick={onclick}>{"Use"}</button>
+            </div>
+        </article>
+    }
+}
+
+fn governance_summary_strip(summary: &GovernanceStoreSummary) -> Html {
+    html! {
+        <div class="audit-strip">
+            <span>{format!("{} policies", summary.policy_count)}</span>
+            <span>{format!("{} schema releases", summary.schema_release_count)}</span>
+            <span>{format!("{} readiness", summary.component_readiness_count)}</span>
+            <span>{format!("{} production-ready", summary.production_ready_component_count)}</span>
+            <span>{format!("{} blocked", summary.blocked_component_count)}</span>
+            <span>{format!("{} advisories", summary.security_advisory_count)}</span>
+            <span>{format!("{} critical", summary.critical_advisory_count)}</span>
+            <span>{format!("{} emergency", summary.emergency_action_count)}</span>
+        </div>
+    }
+}
+
+fn governance_record_row(
+    record: &GovernanceRecordSummary,
+    load_governance_record: &Callback<String>,
+) -> Html {
+    let record_id = record.record_id.clone();
+    let onclick = {
+        let load_governance_record = load_governance_record.clone();
+        Callback::from(move |_| load_governance_record.emit(record_id.clone()))
+    };
+    let signature = if record.signature_present {
+        "signed"
+    } else {
+        "unsigned"
+    };
+    html! {
+        <article class="governance-row">
+            <div class="governance-row-top">
+                <div>
+                    <strong>{record.title.clone()}</strong>
+                    <small>{format!("{} | {}", record.record_type, record.record_id)}</small>
+                    <small>{format!("{} | actor {} | {}", record.status, record.primary_actor, signature)}</small>
+                    <small>{record.path.clone()}</small>
+                </div>
+                <button type="button" onclick={onclick}>{"Details"}</button>
+            </div>
+        </article>
+    }
+}
+
 fn marketplace_audit_summary(audit: &Value) -> Html {
+    let quote_count = audit.get("quoteCount").and_then(Value::as_u64).unwrap_or(0);
+    let valid_quote_count = audit
+        .get("validQuoteCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
     let settlement_count = audit
         .get("settlementCount")
         .and_then(Value::as_u64)
@@ -2261,15 +3482,177 @@ fn marketplace_audit_summary(audit: &Value) -> Html {
         .get("validResolutionCount")
         .and_then(Value::as_u64)
         .unwrap_or(0);
+    let latest_quote = latest_audit_id(audit, "quotes", "quoteId");
     let latest_settlement = latest_audit_id(audit, "settlements", "settlementId");
     let latest_resolution = latest_audit_id(audit, "resolutions", "resolutionId");
 
     html! {
         <div class="audit-strip">
+            <span>{format!("{valid_quote_count}/{quote_count} quotes")}</span>
             <span>{format!("{valid_settlement_count}/{settlement_count} settlements")}</span>
             <span>{format!("{valid_resolution_count}/{resolution_count} resolutions")}</span>
+            <span>{format!("latest quote {latest_quote}")}</span>
             <span>{format!("latest settlement {latest_settlement}")}</span>
             <span>{format!("latest resolution {latest_resolution}")}</span>
+        </div>
+    }
+}
+
+fn job_audit_summary(audit: &Value) -> Html {
+    if audit.get("schemaVersion").and_then(Value::as_str)
+        == Some("swarm-ai.job-production-lifecycle-store-summary.v1")
+    {
+        let job_count = audit.get("jobCount").and_then(Value::as_u64).unwrap_or(0);
+        let ready = audit
+            .get("readyForSettlementCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let action = audit
+            .get("requiresOperatorActionCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let blocked_jobs = audit
+            .get("blockedJobCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let completed = audit
+            .get("completedStageCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let pending = audit
+            .get("pendingStageCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let blocked = audit
+            .get("blockedStageCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let warnings = audit
+            .get("warnings")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0);
+
+        return html! {
+            <div class="audit-strip">
+                <span>{format!("{job_count} jobs")}</span>
+                <span>{format!("{ready} ready")}</span>
+                <span>{format!("{action} action")}</span>
+                <span>{format!("{blocked_jobs} blocked jobs")}</span>
+                <span>{format!("{completed} complete stages")}</span>
+                <span>{format!("{pending} pending stages")}</span>
+                <span>{format!("{blocked} blocked stages")}</span>
+                <span>{format!("{warnings} warnings")}</span>
+            </div>
+        };
+    }
+
+    if audit.get("schemaVersion").and_then(Value::as_str)
+        == Some("swarm-ai.route-trace-store-summary.v1")
+    {
+        let trace_count = audit.get("traceCount").and_then(Value::as_u64).unwrap_or(0);
+        let fallback = audit
+            .get("fallbackTraceCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let failed = audit
+            .get("failedTraceCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let latest = latest_audit_id(audit, "traces", "requestId");
+
+        return html! {
+            <div class="audit-strip">
+                <span>{format!("{trace_count} traces")}</span>
+                <span>{format!("{fallback} fallback")}</span>
+                <span>{format!("{failed} failed")}</span>
+                <span>{format!("latest {latest}")}</span>
+            </div>
+        };
+    }
+
+    if audit.get("schemaVersion").and_then(Value::as_str)
+        == Some("swarm-ai.route-decision-store-summary.v1")
+    {
+        let decision_count = audit
+            .get("decisionCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let selected = audit
+            .get("withSelectedRouteCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let rejected_only = audit
+            .get("rejectedOnlyCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let fallback = audit
+            .get("fallbackPlannedCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let valid_proofs = audit
+            .get("validProofCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let invalid_proofs = audit
+            .get("invalidProofCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let latest = latest_audit_id(audit, "decisions", "requestId");
+
+        return html! {
+            <div class="audit-strip">
+                <span>{format!("{decision_count} decisions")}</span>
+                <span>{format!("{selected} selected")}</span>
+                <span>{format!("{rejected_only} rejected-only")}</span>
+                <span>{format!("{fallback} fallback planned")}</span>
+                <span>{format!("{valid_proofs} valid proofs")}</span>
+                <span>{format!("{invalid_proofs} invalid proofs")}</span>
+                <span>{format!("latest {latest}")}</span>
+            </div>
+        };
+    }
+
+    let job_count = audit.get("jobCount").and_then(Value::as_u64).unwrap_or(0);
+    let active = audit
+        .get("activeJobCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let terminal = audit
+        .get("terminalJobCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let receipts = audit
+        .get("receiptLinkedJobCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let streams = audit
+        .get("streamLinkedJobCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let validation = audit
+        .get("validationLinkedJobCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let stale = audit
+        .get("staleJobCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let warnings = audit
+        .get("timelineWarningCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+
+    html! {
+        <div class="audit-strip">
+            <span>{format!("{job_count} jobs")}</span>
+            <span>{format!("{active} active")}</span>
+            <span>{format!("{terminal} terminal")}</span>
+            <span>{format!("{receipts} receipts")}</span>
+            <span>{format!("{streams} streams")}</span>
+            <span>{format!("{validation} validations")}</span>
+            <span>{format!("{stale} stale")}</span>
+            <span>{format!("{warnings} warnings")}</span>
         </div>
     }
 }

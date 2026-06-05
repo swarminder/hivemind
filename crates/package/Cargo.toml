@@ -7,6 +7,7 @@ authors.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+chrono.workspace = true
 hex.workspace = true
 hivemind-core = { path = "../core" }
 hivemind-storage = { path = "../storage" }
