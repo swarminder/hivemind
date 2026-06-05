@@ -23,6 +23,7 @@ const DEV_STORAGE_EVENT_RECEIPT_SIGNATURE_PREFIX: &str = "dev-storage-event-rece
 const DEV_STORAGE_SPONSORSHIP_SIGNATURE_PREFIX: &str = "dev-storage-sponsorship-signature-v1";
 const DEV_BROWSER_STORAGE_SECURITY_ASSESSMENT_SIGNATURE_PREFIX: &str =
     "dev-browser-storage-security-assessment-signature-v1";
+const DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX: &str = "dev-browser-storage-v5-signature-v1";
 
 pub const BROWSER_STORAGE_SECURITY_ASSESSMENT_REQUEST_SCHEMA_VERSION: &str =
     "hivemind.browser-storage-security-assessment-request.v1";
@@ -30,6 +31,16 @@ pub const BROWSER_STORAGE_SECURITY_ASSESSMENT_SCHEMA_VERSION: &str =
     "hivemind.browser-storage-security-assessment.v1";
 pub const BROWSER_STORAGE_SECURITY_ASSESSMENT_VERIFICATION_SCHEMA_VERSION: &str =
     "hivemind.browser-storage-security-assessment-verification.v1";
+pub const BROWSER_STORAGE_CAPABILITY_PROBE_SCHEMA_VERSION: &str =
+    "hivemind.browser-storage-capability-probe.v1";
+pub const BROWSER_STORAGE_PURCHASE_QUOTE_SCHEMA_VERSION: &str =
+    "hivemind.browser-storage-purchase-quote.v1";
+pub const BROWSER_STORAGE_PURCHASE_AUTHORIZATION_SCHEMA_VERSION: &str =
+    "hivemind.browser-storage-purchase-authorization.v1";
+pub const BROWSER_STORAGE_SESSION_V2_SCHEMA_VERSION: &str = "hivemind.browser-storage-session.v2";
+pub const STORAGE_EVENT_RECEIPT_V2_SCHEMA_VERSION: &str = "hivemind.storage-event-receipt.v2";
+pub const BROWSER_STORAGE_STATE_REPORT_SCHEMA_VERSION: &str =
+    "hivemind.browser-storage-state-report.v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct StorageCapabilities {
@@ -358,6 +369,12 @@ pub enum BrowserStorageSessionStatusV1 {
     Error,
 }
 
+impl Default for BrowserStorageSessionStatusV1 {
+    fn default() -> Self {
+        Self::Requested
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct BrowserStorageQuotaEstimateV1 {
     #[serde(
@@ -596,6 +613,343 @@ pub struct ClearStateReceiptV1 {
     pub created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BrowserStorageCapabilityProbeV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "probeId")]
+    pub probe_id: String,
+    #[serde(rename = "providerId")]
+    pub provider_id: String,
+    #[serde(rename = "providerName")]
+    pub provider_name: String,
+    #[serde(rename = "providerVersion")]
+    pub provider_version: String,
+    #[serde(rename = "browserName")]
+    pub browser_name: String,
+    #[serde(rename = "browserVersion")]
+    pub browser_version: String,
+    pub origin: String,
+    #[serde(rename = "networkId", default, skip_serializing_if = "Option::is_none")]
+    pub network_id: Option<String>,
+    #[serde(rename = "canStart")]
+    pub can_start: bool,
+    #[serde(rename = "canRetrieve")]
+    pub can_retrieve: bool,
+    #[serde(rename = "canUpload")]
+    pub can_upload: bool,
+    #[serde(rename = "canUploadFileList")]
+    pub can_upload_file_list: bool,
+    #[serde(rename = "canBuyStorage")]
+    pub can_buy_storage: bool,
+    #[serde(rename = "canReuseStorage")]
+    pub can_reuse_storage: bool,
+    #[serde(rename = "canResetStorage")]
+    pub can_reset_storage: bool,
+    #[serde(rename = "canUpdateFeed")]
+    pub can_update_feed: bool,
+    #[serde(rename = "canEncryptUpload")]
+    pub can_encrypt_upload: bool,
+    #[serde(rename = "canReportProgress")]
+    pub can_report_progress: bool,
+    #[serde(rename = "canUseServiceWorker")]
+    pub can_use_service_worker: bool,
+    #[serde(rename = "canPersistIndexedDb")]
+    pub can_persist_indexed_db: bool,
+    #[serde(rename = "canClearIndexedDb")]
+    pub can_clear_indexed_db: bool,
+    #[serde(rename = "walletProvidersDetected", default)]
+    pub wallet_providers_detected: Vec<String>,
+    #[serde(
+        rename = "maxRecommendedUploadBytes",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub max_recommended_upload_bytes: Option<u64>,
+    #[serde(
+        rename = "estimatedQuotaBytes",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub estimated_quota_bytes: Option<u64>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(rename = "fallbackProviders", default)]
+    pub fallback_providers: Vec<String>,
+    #[serde(rename = "probedAt")]
+    pub probed_at: String,
+    #[serde(default)]
+    pub signatures: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BrowserStoragePurchaseQuoteV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "quoteId")]
+    pub quote_id: String,
+    #[serde(rename = "providerId")]
+    pub provider_id: String,
+    #[serde(rename = "providerName")]
+    pub provider_name: String,
+    #[serde(rename = "providerKind")]
+    pub provider_kind: StorageProviderKindV4,
+    pub origin: String,
+    #[serde(rename = "requestedBytes")]
+    pub requested_bytes: u64,
+    #[serde(rename = "durationSeconds")]
+    pub duration_seconds: u64,
+    #[serde(rename = "estimatedCost")]
+    pub estimated_cost: StorageCostV1,
+    #[serde(rename = "chainId", default, skip_serializing_if = "Option::is_none")]
+    pub chain_id: Option<String>,
+    #[serde(rename = "networkId", default, skip_serializing_if = "Option::is_none")]
+    pub network_id: Option<String>,
+    #[serde(default)]
+    pub risks: Vec<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: String,
+    #[serde(default)]
+    pub signatures: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BrowserStoragePurchaseAuthorizationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "authorizationId")]
+    pub authorization_id: String,
+    #[serde(rename = "quoteId")]
+    pub quote_id: String,
+    #[serde(rename = "providerId")]
+    pub provider_id: String,
+    pub origin: String,
+    #[serde(rename = "walletAddress")]
+    pub wallet_address: String,
+    #[serde(rename = "chainId", default, skip_serializing_if = "Option::is_none")]
+    pub chain_id: Option<String>,
+    #[serde(rename = "networkId", default, skip_serializing_if = "Option::is_none")]
+    pub network_id: Option<String>,
+    pub approved: bool,
+    #[serde(rename = "requestedBytes")]
+    pub requested_bytes: u64,
+    #[serde(rename = "durationSeconds")]
+    pub duration_seconds: u64,
+    #[serde(rename = "maxCost")]
+    pub max_cost: StorageCostV1,
+    #[serde(rename = "promptTextHash")]
+    pub prompt_text_hash: String,
+    #[serde(rename = "risksAccepted", default)]
+    pub risks_accepted: Vec<String>,
+    #[serde(rename = "approvedAt")]
+    pub approved_at: String,
+    #[serde(default)]
+    pub signatures: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageEventActionV2 {
+    Start,
+    Buy,
+    Reuse,
+    Reset,
+    Upload,
+    Retrieve,
+    FeedUpdate,
+    ClearState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserStorageEncryptionModeV1 {
+    None,
+    ClientSide,
+    ProviderManaged,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BrowserStorageSessionV2 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "providerId")]
+    pub provider_id: String,
+    #[serde(rename = "providerName")]
+    pub provider_name: String,
+    #[serde(rename = "providerVersion")]
+    pub provider_version: String,
+    #[serde(rename = "providerKind")]
+    pub provider_kind: StorageProviderKindV4,
+    pub origin: String,
+    #[serde(
+        rename = "walletAddress",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub wallet_address: Option<String>,
+    #[serde(rename = "chainId", default, skip_serializing_if = "Option::is_none")]
+    pub chain_id: Option<String>,
+    #[serde(rename = "networkId", default, skip_serializing_if = "Option::is_none")]
+    pub network_id: Option<String>,
+    #[serde(rename = "batchId", default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(rename = "quotaBytes")]
+    pub quota_bytes: u64,
+    #[serde(rename = "usedBytes")]
+    pub used_bytes: u64,
+    #[serde(rename = "availableBytes")]
+    pub available_bytes: u64,
+    #[serde(
+        rename = "capabilityProbeRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub capability_probe_ref: Option<String>,
+    #[serde(
+        rename = "authorizationRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub authorization_ref: Option<String>,
+    #[serde(
+        rename = "consentRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub consent_ref: Option<String>,
+    #[serde(default)]
+    pub permissions: Vec<BrowserStoragePermissionV1>,
+    #[serde(default)]
+    pub capabilities: Vec<BrowserSwarmStorageMethodV4>,
+    #[serde(rename = "securityWarnings", default)]
+    pub security_warnings: Vec<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: String,
+    #[serde(default)]
+    pub status: BrowserStorageSessionStatusV1,
+    #[serde(default)]
+    pub signatures: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StorageEventReceiptV2 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "receiptId")]
+    pub receipt_id: String,
+    pub action: StorageEventActionV2,
+    #[serde(rename = "providerId")]
+    pub provider_id: String,
+    #[serde(rename = "providerName")]
+    pub provider_name: String,
+    #[serde(rename = "providerVersion")]
+    pub provider_version: String,
+    pub origin: String,
+    #[serde(
+        rename = "walletAddress",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub wallet_address: Option<String>,
+    #[serde(rename = "chainId", default, skip_serializing_if = "Option::is_none")]
+    pub chain_id: Option<String>,
+    #[serde(rename = "networkId", default, skip_serializing_if = "Option::is_none")]
+    pub network_id: Option<String>,
+    #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    #[serde(rename = "feedTopic", default, skip_serializing_if = "Option::is_none")]
+    pub feed_topic: Option<String>,
+    #[serde(
+        rename = "contentHash",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub content_hash: Option<String>,
+    #[serde(rename = "byteSize")]
+    pub byte_size: u64,
+    #[serde(rename = "batchId", default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(rename = "encryptionMode")]
+    pub encryption_mode: BrowserStorageEncryptionModeV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<StorageTransferMetricsV1>,
+    #[serde(rename = "consentId", default, skip_serializing_if = "Option::is_none")]
+    pub consent_id: Option<String>,
+    #[serde(
+        rename = "authorizationId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub authorization_id: Option<String>,
+    #[serde(rename = "sessionId", default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<SwarmAiErrorV1>,
+    pub status: StorageEventStatusV1,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(default)]
+    pub signatures: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BrowserStorageStateEntryV1 {
+    #[serde(rename = "stateKind")]
+    pub state_kind: String,
+    #[serde(rename = "keyRef")]
+    pub key_ref: String,
+    pub sensitive: bool,
+    pub clearable: bool,
+    #[serde(rename = "sizeBytes", default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BrowserStorageStateReportV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "reportId")]
+    pub report_id: String,
+    #[serde(rename = "providerId")]
+    pub provider_id: String,
+    pub origin: String,
+    #[serde(
+        rename = "walletAddress",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub wallet_address: Option<String>,
+    #[serde(rename = "indexedDbEntries", default)]
+    pub indexed_db_entries: Vec<BrowserStorageStateEntryV1>,
+    #[serde(rename = "serviceWorkerScopes", default)]
+    pub service_worker_scopes: Vec<String>,
+    #[serde(rename = "activeSessionRefs", default)]
+    pub active_session_refs: Vec<String>,
+    #[serde(rename = "batchRefs", default)]
+    pub batch_refs: Vec<String>,
+    #[serde(rename = "feedOwnerKeyRefs", default)]
+    pub feed_owner_key_refs: Vec<String>,
+    #[serde(rename = "clearStateSupported")]
+    pub clear_state_supported: bool,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(default)]
+    pub signatures: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -2863,6 +3217,812 @@ pub fn storage_event_receipt_for_upload(
     receipt
 }
 
+pub fn browser_storage_capability_probe_ref(probe_id: &str) -> String {
+    format!("local://browser-storage/capability-probes/{probe_id}")
+}
+
+pub fn browser_storage_purchase_quote_ref(quote_id: &str) -> String {
+    format!("local://browser-storage/purchase-quotes/{quote_id}")
+}
+
+pub fn browser_storage_purchase_authorization_ref(authorization_id: &str) -> String {
+    format!("local://browser-storage/purchase-authorizations/{authorization_id}")
+}
+
+pub fn browser_storage_session_v2_ref(session_id: &str) -> String {
+    format!("local://browser-storage/sessions-v2/{session_id}")
+}
+
+pub fn storage_event_receipt_v2_ref(receipt_id: &str) -> String {
+    format!("local://browser-storage/storage-event-receipts-v2/{receipt_id}")
+}
+
+pub fn browser_storage_capability_probe(
+    provider: &BrowserSwarmStorageProviderV4,
+    browser_name: impl Into<String>,
+    browser_version: impl Into<String>,
+    origin: impl Into<String>,
+    network_id: Option<String>,
+    wallet_providers_detected: Vec<String>,
+    estimated_quota_bytes: Option<u64>,
+) -> BrowserStorageCapabilityProbeV1 {
+    let methods = &provider.capability_report.methods;
+    let mut probe = BrowserStorageCapabilityProbeV1 {
+        schema_version: BROWSER_STORAGE_CAPABILITY_PROBE_SCHEMA_VERSION.to_string(),
+        probe_id: String::new(),
+        provider_id: provider.provider_id.clone(),
+        provider_name: provider.provider_name.clone(),
+        provider_version: provider.provider_version.clone(),
+        browser_name: browser_name.into(),
+        browser_version: browser_version.into(),
+        origin: origin.into(),
+        network_id,
+        can_start: methods.contains(&BrowserSwarmStorageMethodV4::ProbeCapabilities),
+        can_retrieve: methods.contains(&BrowserSwarmStorageMethodV4::Retrieve),
+        can_upload: methods.iter().any(|method| {
+            matches!(
+                method,
+                BrowserSwarmStorageMethodV4::UploadBlob
+                    | BrowserSwarmStorageMethodV4::UploadFiles
+                    | BrowserSwarmStorageMethodV4::UploadJson
+                    | BrowserSwarmStorageMethodV4::UploadManifest
+            )
+        }),
+        can_upload_file_list: methods.contains(&BrowserSwarmStorageMethodV4::UploadFiles),
+        can_buy_storage: methods.contains(&BrowserSwarmStorageMethodV4::BuyStorage),
+        can_reuse_storage: methods.contains(&BrowserSwarmStorageMethodV4::ReuseStorage),
+        can_reset_storage: methods.contains(&BrowserSwarmStorageMethodV4::ResetStorage),
+        can_update_feed: methods.contains(&BrowserSwarmStorageMethodV4::UpdateFeed),
+        can_encrypt_upload: methods.contains(&BrowserSwarmStorageMethodV4::UploadBlob)
+            || methods.contains(&BrowserSwarmStorageMethodV4::UploadFiles),
+        can_report_progress: provider.capability_report.supports_progress_events,
+        can_use_service_worker: matches!(
+            provider.profile,
+            BrowserSwarmProviderProfileV1::DirectBrowserPublishing
+                | BrowserSwarmProviderProfileV1::BrowserGatewayFallback
+        ),
+        can_persist_indexed_db: matches!(
+            provider.provider_kind,
+            StorageProviderKindV4::Weeb3Browser | StorageProviderKindV4::BeeJsBrowser
+        ),
+        can_clear_indexed_db: methods
+            .contains(&BrowserSwarmStorageMethodV4::ClearSensitiveBrowserState),
+        wallet_providers_detected,
+        max_recommended_upload_bytes: provider.capability_report.max_recommended_upload_bytes,
+        estimated_quota_bytes,
+        warnings: provider
+            .capability_report
+            .security_warnings
+            .iter()
+            .chain(provider.capability_report.limitations.iter())
+            .cloned()
+            .collect(),
+        fallback_providers: provider.fallback_provider_ids.clone(),
+        probed_at: timestamp(),
+        signatures: Vec::new(),
+    };
+    probe.probe_id = canonical_browser_storage_capability_probe_id(&probe);
+    probe
+}
+
+pub fn browser_storage_purchase_quote(
+    provider: &BrowserSwarmStorageProviderV4,
+    probe: &BrowserStorageCapabilityProbeV1,
+    requested_bytes: u64,
+    duration_seconds: u64,
+    estimated_cost: StorageCostV1,
+    chain_id: Option<String>,
+) -> BrowserStoragePurchaseQuoteV1 {
+    let mut warnings = Vec::new();
+    if !probe.can_buy_storage {
+        warnings.push("Provider probe does not advertise storage purchase support".to_string());
+    }
+    if let Some(max_bytes) = probe.max_recommended_upload_bytes
+        && requested_bytes > max_bytes
+    {
+        warnings.push("Requested storage exceeds provider maxRecommendedUploadBytes".to_string());
+    }
+    let mut quote = BrowserStoragePurchaseQuoteV1 {
+        schema_version: BROWSER_STORAGE_PURCHASE_QUOTE_SCHEMA_VERSION.to_string(),
+        quote_id: String::new(),
+        provider_id: provider.provider_id.clone(),
+        provider_name: provider.provider_name.clone(),
+        provider_kind: provider.provider_kind.clone(),
+        origin: probe.origin.clone(),
+        requested_bytes,
+        duration_seconds,
+        estimated_cost,
+        chain_id,
+        network_id: probe.network_id.clone(),
+        risks: vec![
+            "User wallet may reject the storage purchase".to_string(),
+            "Browser quota or provider batch state can change before purchase".to_string(),
+        ],
+        warnings,
+        created_at: timestamp(),
+        expires_at: timestamp_after_seconds(600),
+        signatures: Vec::new(),
+    };
+    quote.quote_id = canonical_browser_storage_purchase_quote_id(&quote)
+        .expect("browser storage purchase quote should serialize for id");
+    quote
+}
+
+pub fn browser_storage_purchase_authorization(
+    quote: &BrowserStoragePurchaseQuoteV1,
+    wallet_address: impl Into<String>,
+    approved: bool,
+    prompt_text: impl AsRef<[u8]>,
+) -> BrowserStoragePurchaseAuthorizationV1 {
+    let mut authorization = BrowserStoragePurchaseAuthorizationV1 {
+        schema_version: BROWSER_STORAGE_PURCHASE_AUTHORIZATION_SCHEMA_VERSION.to_string(),
+        authorization_id: String::new(),
+        quote_id: quote.quote_id.clone(),
+        provider_id: quote.provider_id.clone(),
+        origin: quote.origin.clone(),
+        wallet_address: wallet_address.into(),
+        chain_id: quote.chain_id.clone(),
+        network_id: quote.network_id.clone(),
+        approved,
+        requested_bytes: quote.requested_bytes,
+        duration_seconds: quote.duration_seconds,
+        max_cost: quote.estimated_cost.clone(),
+        prompt_text_hash: format!("sha256:{}", sha256_hex(prompt_text.as_ref())),
+        risks_accepted: quote.risks.clone(),
+        approved_at: timestamp(),
+        signatures: Vec::new(),
+    };
+    authorization.authorization_id =
+        canonical_browser_storage_purchase_authorization_id(&authorization)
+            .expect("browser storage purchase authorization should serialize for id");
+    authorization
+}
+
+pub fn browser_storage_session_v2(
+    provider: &BrowserSwarmStorageProviderV4,
+    probe: &BrowserStorageCapabilityProbeV1,
+    authorization: Option<&BrowserStoragePurchaseAuthorizationV1>,
+    quota_bytes: u64,
+    duration_seconds: u64,
+) -> BrowserStorageSessionV2 {
+    let used_bytes = 0;
+    let mut permissions = Vec::new();
+    if probe.can_buy_storage {
+        permissions.push(BrowserStoragePermissionV1::BuyStorage);
+    }
+    if probe.can_reuse_storage {
+        permissions.push(BrowserStoragePermissionV1::ReuseStorage);
+    }
+    if probe.can_reset_storage {
+        permissions.push(BrowserStoragePermissionV1::ResetStorage);
+    }
+    if probe.can_upload {
+        permissions.push(BrowserStoragePermissionV1::Upload);
+    }
+    if probe.can_retrieve {
+        permissions.push(BrowserStoragePermissionV1::Retrieve);
+    }
+    if probe.can_update_feed {
+        permissions.push(BrowserStoragePermissionV1::FeedUpdate);
+    }
+    let status = if authorization
+        .map(|authorization| authorization.approved)
+        .unwrap_or(true)
+    {
+        BrowserStorageSessionStatusV1::Active
+    } else {
+        BrowserStorageSessionStatusV1::Requested
+    };
+    let mut session = BrowserStorageSessionV2 {
+        schema_version: BROWSER_STORAGE_SESSION_V2_SCHEMA_VERSION.to_string(),
+        session_id: String::new(),
+        provider_id: provider.provider_id.clone(),
+        provider_name: provider.provider_name.clone(),
+        provider_version: provider.provider_version.clone(),
+        provider_kind: provider.provider_kind.clone(),
+        origin: probe.origin.clone(),
+        wallet_address: authorization.map(|authorization| authorization.wallet_address.clone()),
+        chain_id: authorization.and_then(|authorization| authorization.chain_id.clone()),
+        network_id: probe.network_id.clone(),
+        batch_id: None,
+        quota_bytes,
+        used_bytes,
+        available_bytes: quota_bytes.saturating_sub(used_bytes),
+        capability_probe_ref: Some(browser_storage_capability_probe_ref(&probe.probe_id)),
+        authorization_ref: authorization.map(|authorization| {
+            browser_storage_purchase_authorization_ref(&authorization.authorization_id)
+        }),
+        consent_ref: None,
+        permissions,
+        capabilities: provider.capability_report.methods.clone(),
+        security_warnings: probe.warnings.clone(),
+        created_at: timestamp(),
+        expires_at: timestamp_after_seconds(duration_seconds),
+        status,
+        signatures: Vec::new(),
+    };
+    session.session_id = canonical_browser_storage_session_v2_id(&session)
+        .expect("browser storage session v2 should serialize for id");
+    session
+}
+
+pub fn storage_event_receipt_v2(
+    session: &BrowserStorageSessionV2,
+    action: StorageEventActionV2,
+    reference: Option<String>,
+    content_hash: Option<String>,
+    byte_size: u64,
+    encryption_mode: BrowserStorageEncryptionModeV1,
+    status: StorageEventStatusV1,
+    error: Option<SwarmAiErrorV1>,
+) -> StorageEventReceiptV2 {
+    let mut warnings = Vec::new();
+    if matches!(action, StorageEventActionV2::Upload)
+        && !session.capabilities.iter().any(|method| {
+            matches!(
+                method,
+                BrowserSwarmStorageMethodV4::UploadBlob
+                    | BrowserSwarmStorageMethodV4::UploadFiles
+                    | BrowserSwarmStorageMethodV4::UploadJson
+                    | BrowserSwarmStorageMethodV4::UploadManifest
+            )
+        })
+    {
+        warnings.push("Session provider did not advertise upload support".to_string());
+    }
+    let mut receipt = StorageEventReceiptV2 {
+        schema_version: STORAGE_EVENT_RECEIPT_V2_SCHEMA_VERSION.to_string(),
+        receipt_id: String::new(),
+        action,
+        provider_id: session.provider_id.clone(),
+        provider_name: session.provider_name.clone(),
+        provider_version: session.provider_version.clone(),
+        origin: session.origin.clone(),
+        wallet_address: session.wallet_address.clone(),
+        chain_id: session.chain_id.clone(),
+        network_id: session.network_id.clone(),
+        reference,
+        feed_topic: None,
+        content_hash,
+        byte_size,
+        batch_id: session.batch_id.clone(),
+        encryption_mode,
+        timing: Some(StorageTransferMetricsV1 {
+            schema_version: "swarm-ai.storage.transfer-metrics.v1".to_string(),
+            resolve_ms: 0,
+            first_byte_ms: 0,
+            total_ms: 0,
+            size_bytes: usize::try_from(byte_size).unwrap_or(usize::MAX),
+            retry_count: 0,
+        }),
+        consent_id: session.consent_ref.as_deref().and_then(ref_tail),
+        authorization_id: session.authorization_ref.as_deref().and_then(ref_tail),
+        session_id: Some(session.session_id.clone()),
+        warnings,
+        error,
+        status,
+        created_at: timestamp(),
+        signatures: Vec::new(),
+    };
+    receipt.receipt_id = canonical_storage_event_receipt_v2_id(&receipt)
+        .expect("storage event receipt v2 should serialize for id");
+    receipt
+}
+
+pub fn browser_storage_state_report(
+    session: &BrowserStorageSessionV2,
+    indexed_db_entries: Vec<BrowserStorageStateEntryV1>,
+    service_worker_scopes: Vec<String>,
+) -> BrowserStorageStateReportV1 {
+    let mut warnings = Vec::new();
+    if indexed_db_entries
+        .iter()
+        .any(|entry| entry.sensitive && !entry.clearable)
+    {
+        warnings.push("Sensitive browser storage state includes non-clearable entries".to_string());
+    }
+    let mut report = BrowserStorageStateReportV1 {
+        schema_version: BROWSER_STORAGE_STATE_REPORT_SCHEMA_VERSION.to_string(),
+        report_id: String::new(),
+        provider_id: session.provider_id.clone(),
+        origin: session.origin.clone(),
+        wallet_address: session.wallet_address.clone(),
+        indexed_db_entries,
+        service_worker_scopes,
+        active_session_refs: vec![browser_storage_session_v2_ref(&session.session_id)],
+        batch_refs: session.batch_id.clone().into_iter().collect(),
+        feed_owner_key_refs: Vec::new(),
+        clear_state_supported: session
+            .capabilities
+            .contains(&BrowserSwarmStorageMethodV4::ClearSensitiveBrowserState),
+        warnings,
+        created_at: timestamp(),
+        signatures: Vec::new(),
+    };
+    report.report_id = canonical_browser_storage_state_report_id(&report);
+    report
+}
+
+pub fn canonical_browser_storage_capability_probe_id(
+    probe: &BrowserStorageCapabilityProbeV1,
+) -> String {
+    canonical_id(
+        "browser-storage-probe",
+        signing_value(probe, "probeId").expect("browser storage probe should serialize"),
+    )
+    .expect("browser storage probe id should serialize")
+}
+
+pub fn expected_browser_storage_capability_probe_signature(
+    probe: &BrowserStorageCapabilityProbeV1,
+) -> serde_json::Result<String> {
+    expected_dev_signature(
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        browser_storage_capability_probe_signing_value(probe)?,
+    )
+}
+
+pub fn sign_browser_storage_capability_probe(
+    probe: &mut BrowserStorageCapabilityProbeV1,
+) -> serde_json::Result<String> {
+    let expected_signature = expected_browser_storage_capability_probe_signature(probe)?;
+    probe
+        .signatures
+        .retain(|value| !value.starts_with(DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX));
+    probe.signatures.push(expected_signature.clone());
+    probe.probe_id = canonical_browser_storage_capability_probe_id(probe);
+    Ok(expected_signature)
+}
+
+pub fn verify_browser_storage_capability_probe(
+    probe: &BrowserStorageCapabilityProbeV1,
+) -> StorageContractVerificationV1 {
+    let expected_id = canonical_browser_storage_capability_probe_id(probe);
+    let expected_signature = expected_browser_storage_capability_probe_signature(probe)
+        .unwrap_or_else(|_| format!("{DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX}:invalid"));
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    require_schema(
+        &mut issues,
+        &probe.schema_version,
+        BROWSER_STORAGE_CAPABILITY_PROBE_SCHEMA_VERSION,
+    );
+    require_non_empty(&mut issues, "$.providerId", &probe.provider_id);
+    require_non_empty(&mut issues, "$.providerName", &probe.provider_name);
+    require_non_empty(&mut issues, "$.browserName", &probe.browser_name);
+    require_non_empty(&mut issues, "$.origin", &probe.origin);
+    if !probe.can_start && !probe.can_retrieve && !probe.can_upload {
+        issues.push(issue(
+            "$",
+            "BrowserStorageCapabilityProbeV1 must advertise at least one usable storage capability",
+        ));
+    }
+    verify_contract_signature(
+        &probe.signatures,
+        &expected_signature,
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        "browser storage capability probe",
+        &mut issues,
+        &mut warnings,
+    );
+    verification(
+        "hivemind.browser-storage-capability-probe-verification.v1",
+        probe.probe_id.clone(),
+        expected_id,
+        expected_signature,
+        issues,
+        warnings,
+    )
+}
+
+pub fn canonical_browser_storage_purchase_quote_id(
+    quote: &BrowserStoragePurchaseQuoteV1,
+) -> serde_json::Result<String> {
+    canonical_id(
+        "browser-storage-purchase-quote",
+        browser_storage_purchase_quote_signing_value(quote)?,
+    )
+}
+
+pub fn expected_browser_storage_purchase_quote_signature(
+    quote: &BrowserStoragePurchaseQuoteV1,
+) -> serde_json::Result<String> {
+    expected_dev_signature(
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        browser_storage_purchase_quote_signing_value(quote)?,
+    )
+}
+
+pub fn sign_browser_storage_purchase_quote(
+    quote: &mut BrowserStoragePurchaseQuoteV1,
+) -> serde_json::Result<String> {
+    let expected_signature = expected_browser_storage_purchase_quote_signature(quote)?;
+    quote
+        .signatures
+        .retain(|value| !value.starts_with(DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX));
+    quote.signatures.push(expected_signature.clone());
+    quote.quote_id = canonical_browser_storage_purchase_quote_id(quote)?;
+    Ok(expected_signature)
+}
+
+pub fn verify_browser_storage_purchase_quote(
+    quote: &BrowserStoragePurchaseQuoteV1,
+) -> StorageContractVerificationV1 {
+    let expected_id = canonical_browser_storage_purchase_quote_id(quote)
+        .unwrap_or_else(|_| "browser-storage-purchase-quote-invalid".to_string());
+    let expected_signature = expected_browser_storage_purchase_quote_signature(quote)
+        .unwrap_or_else(|_| format!("{DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX}:invalid"));
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    require_schema(
+        &mut issues,
+        &quote.schema_version,
+        BROWSER_STORAGE_PURCHASE_QUOTE_SCHEMA_VERSION,
+    );
+    require_non_empty(&mut issues, "$.providerId", &quote.provider_id);
+    require_non_empty(&mut issues, "$.origin", &quote.origin);
+    if quote.requested_bytes == 0 {
+        issues.push(issue("$.requestedBytes", "requestedBytes must be non-zero"));
+    }
+    if quote.duration_seconds == 0 {
+        issues.push(issue(
+            "$.durationSeconds",
+            "durationSeconds must be non-zero",
+        ));
+    }
+    if quote.estimated_cost.amount < 0.0 {
+        issues.push(issue(
+            "$.estimatedCost.amount",
+            "estimatedCost.amount must not be negative",
+        ));
+    }
+    require_non_empty(
+        &mut issues,
+        "$.estimatedCost.currency",
+        &quote.estimated_cost.currency,
+    );
+    verify_contract_signature(
+        &quote.signatures,
+        &expected_signature,
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        "browser storage purchase quote",
+        &mut issues,
+        &mut warnings,
+    );
+    verification(
+        "hivemind.browser-storage-purchase-quote-verification.v1",
+        quote.quote_id.clone(),
+        expected_id,
+        expected_signature,
+        issues,
+        warnings,
+    )
+}
+
+pub fn canonical_browser_storage_purchase_authorization_id(
+    authorization: &BrowserStoragePurchaseAuthorizationV1,
+) -> serde_json::Result<String> {
+    canonical_id(
+        "browser-storage-purchase-authorization",
+        browser_storage_purchase_authorization_signing_value(authorization)?,
+    )
+}
+
+pub fn expected_browser_storage_purchase_authorization_signature(
+    authorization: &BrowserStoragePurchaseAuthorizationV1,
+) -> serde_json::Result<String> {
+    expected_dev_signature(
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        browser_storage_purchase_authorization_signing_value(authorization)?,
+    )
+}
+
+pub fn sign_browser_storage_purchase_authorization(
+    authorization: &mut BrowserStoragePurchaseAuthorizationV1,
+) -> serde_json::Result<String> {
+    let expected_signature =
+        expected_browser_storage_purchase_authorization_signature(authorization)?;
+    authorization
+        .signatures
+        .retain(|value| !value.starts_with(DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX));
+    authorization.signatures.push(expected_signature.clone());
+    authorization.authorization_id =
+        canonical_browser_storage_purchase_authorization_id(authorization)?;
+    Ok(expected_signature)
+}
+
+pub fn verify_browser_storage_purchase_authorization(
+    authorization: &BrowserStoragePurchaseAuthorizationV1,
+) -> StorageContractVerificationV1 {
+    let expected_id = canonical_browser_storage_purchase_authorization_id(authorization)
+        .unwrap_or_else(|_| "browser-storage-purchase-authorization-invalid".to_string());
+    let expected_signature =
+        expected_browser_storage_purchase_authorization_signature(authorization)
+            .unwrap_or_else(|_| format!("{DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX}:invalid"));
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    require_schema(
+        &mut issues,
+        &authorization.schema_version,
+        BROWSER_STORAGE_PURCHASE_AUTHORIZATION_SCHEMA_VERSION,
+    );
+    require_non_empty(&mut issues, "$.quoteId", &authorization.quote_id);
+    require_non_empty(&mut issues, "$.providerId", &authorization.provider_id);
+    require_non_empty(&mut issues, "$.origin", &authorization.origin);
+    require_non_empty(
+        &mut issues,
+        "$.walletAddress",
+        &authorization.wallet_address,
+    );
+    if !authorization.approved {
+        warnings.push(issue(
+            "$.approved",
+            "Authorization was recorded as not approved; storage purchase must not proceed",
+        ));
+    }
+    verify_contract_signature(
+        &authorization.signatures,
+        &expected_signature,
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        "browser storage purchase authorization",
+        &mut issues,
+        &mut warnings,
+    );
+    verification(
+        "hivemind.browser-storage-purchase-authorization-verification.v1",
+        authorization.authorization_id.clone(),
+        expected_id,
+        expected_signature,
+        issues,
+        warnings,
+    )
+}
+
+pub fn canonical_browser_storage_session_v2_id(
+    session: &BrowserStorageSessionV2,
+) -> serde_json::Result<String> {
+    canonical_id(
+        "browser-storage-session-v2",
+        browser_storage_session_v2_signing_value(session)?,
+    )
+}
+
+pub fn expected_browser_storage_session_v2_signature(
+    session: &BrowserStorageSessionV2,
+) -> serde_json::Result<String> {
+    expected_dev_signature(
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        browser_storage_session_v2_signing_value(session)?,
+    )
+}
+
+pub fn sign_browser_storage_session_v2(
+    session: &mut BrowserStorageSessionV2,
+) -> serde_json::Result<String> {
+    let expected_signature = expected_browser_storage_session_v2_signature(session)?;
+    session
+        .signatures
+        .retain(|value| !value.starts_with(DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX));
+    session.signatures.push(expected_signature.clone());
+    session.session_id = canonical_browser_storage_session_v2_id(session)?;
+    Ok(expected_signature)
+}
+
+pub fn verify_browser_storage_session_v2(
+    session: &BrowserStorageSessionV2,
+) -> StorageContractVerificationV1 {
+    let expected_id = canonical_browser_storage_session_v2_id(session)
+        .unwrap_or_else(|_| "browser-storage-session-v2-invalid".to_string());
+    let expected_signature = expected_browser_storage_session_v2_signature(session)
+        .unwrap_or_else(|_| format!("{DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX}:invalid"));
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    require_schema(
+        &mut issues,
+        &session.schema_version,
+        BROWSER_STORAGE_SESSION_V2_SCHEMA_VERSION,
+    );
+    require_non_empty(&mut issues, "$.providerId", &session.provider_id);
+    require_non_empty(&mut issues, "$.origin", &session.origin);
+    if session.quota_bytes == 0 {
+        issues.push(issue("$.quotaBytes", "quotaBytes must be non-zero"));
+    }
+    if session.used_bytes > session.quota_bytes {
+        issues.push(issue("$.usedBytes", "usedBytes must not exceed quotaBytes"));
+    }
+    if session.available_bytes != session.quota_bytes.saturating_sub(session.used_bytes) {
+        warnings.push(issue(
+            "$.availableBytes",
+            "availableBytes should equal quotaBytes - usedBytes",
+        ));
+    }
+    if session.permissions.is_empty() {
+        issues.push(issue(
+            "$.permissions",
+            "BrowserStorageSessionV2 must include scoped permissions",
+        ));
+    }
+    verify_contract_signature(
+        &session.signatures,
+        &expected_signature,
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        "browser storage session v2",
+        &mut issues,
+        &mut warnings,
+    );
+    verification(
+        "hivemind.browser-storage-session-v2-verification.v1",
+        session.session_id.clone(),
+        expected_id,
+        expected_signature,
+        issues,
+        warnings,
+    )
+}
+
+pub fn canonical_storage_event_receipt_v2_id(
+    receipt: &StorageEventReceiptV2,
+) -> serde_json::Result<String> {
+    canonical_id(
+        "storage-event-receipt-v2",
+        storage_event_receipt_v2_signing_value(receipt)?,
+    )
+}
+
+pub fn expected_storage_event_receipt_v2_signature(
+    receipt: &StorageEventReceiptV2,
+) -> serde_json::Result<String> {
+    expected_dev_signature(
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        storage_event_receipt_v2_signing_value(receipt)?,
+    )
+}
+
+pub fn sign_storage_event_receipt_v2(
+    receipt: &mut StorageEventReceiptV2,
+) -> serde_json::Result<String> {
+    let expected_signature = expected_storage_event_receipt_v2_signature(receipt)?;
+    receipt
+        .signatures
+        .retain(|value| !value.starts_with(DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX));
+    receipt.signatures.push(expected_signature.clone());
+    receipt.receipt_id = canonical_storage_event_receipt_v2_id(receipt)?;
+    Ok(expected_signature)
+}
+
+pub fn verify_storage_event_receipt_v2(
+    receipt: &StorageEventReceiptV2,
+) -> StorageContractVerificationV1 {
+    let expected_id = canonical_storage_event_receipt_v2_id(receipt)
+        .unwrap_or_else(|_| "storage-event-receipt-v2-invalid".to_string());
+    let expected_signature = expected_storage_event_receipt_v2_signature(receipt)
+        .unwrap_or_else(|_| format!("{DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX}:invalid"));
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    require_schema(
+        &mut issues,
+        &receipt.schema_version,
+        STORAGE_EVENT_RECEIPT_V2_SCHEMA_VERSION,
+    );
+    require_non_empty(&mut issues, "$.providerId", &receipt.provider_id);
+    require_non_empty(&mut issues, "$.origin", &receipt.origin);
+    if matches!(
+        receipt.action,
+        StorageEventActionV2::Upload | StorageEventActionV2::Retrieve
+    ) && receipt.reference.is_none()
+        && receipt.status == StorageEventStatusV1::Succeeded
+    {
+        issues.push(issue(
+            "$.ref",
+            "Succeeded upload and retrieve receipts must include a reference",
+        ));
+    }
+    if matches!(
+        receipt.action,
+        StorageEventActionV2::Upload | StorageEventActionV2::Retrieve
+    ) && receipt.content_hash.is_none()
+    {
+        warnings.push(issue(
+            "$.contentHash",
+            "Upload and retrieve receipts should include contentHash when possible",
+        ));
+    }
+    if receipt.status == StorageEventStatusV1::Failed && receipt.error.is_none() {
+        issues.push(issue(
+            "$.error",
+            "Failed StorageEventReceiptV2 must include an error",
+        ));
+    }
+    verify_contract_signature(
+        &receipt.signatures,
+        &expected_signature,
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        "storage event receipt v2",
+        &mut issues,
+        &mut warnings,
+    );
+    verification(
+        "hivemind.storage-event-receipt-v2-verification.v1",
+        receipt.receipt_id.clone(),
+        expected_id,
+        expected_signature,
+        issues,
+        warnings,
+    )
+}
+
+pub fn canonical_browser_storage_state_report_id(report: &BrowserStorageStateReportV1) -> String {
+    canonical_id(
+        "browser-storage-state-report",
+        signing_value(report, "reportId").expect("browser storage state report should serialize"),
+    )
+    .expect("browser storage state report id should serialize")
+}
+
+pub fn expected_browser_storage_state_report_signature(
+    report: &BrowserStorageStateReportV1,
+) -> serde_json::Result<String> {
+    expected_dev_signature(
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        browser_storage_state_report_signing_value(report)?,
+    )
+}
+
+pub fn sign_browser_storage_state_report(
+    report: &mut BrowserStorageStateReportV1,
+) -> serde_json::Result<String> {
+    let expected_signature = expected_browser_storage_state_report_signature(report)?;
+    report
+        .signatures
+        .retain(|value| !value.starts_with(DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX));
+    report.signatures.push(expected_signature.clone());
+    report.report_id = canonical_browser_storage_state_report_id(report);
+    Ok(expected_signature)
+}
+
+pub fn verify_browser_storage_state_report(
+    report: &BrowserStorageStateReportV1,
+) -> StorageContractVerificationV1 {
+    let expected_id = canonical_browser_storage_state_report_id(report);
+    let expected_signature = expected_browser_storage_state_report_signature(report)
+        .unwrap_or_else(|_| format!("{DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX}:invalid"));
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    require_schema(
+        &mut issues,
+        &report.schema_version,
+        BROWSER_STORAGE_STATE_REPORT_SCHEMA_VERSION,
+    );
+    require_non_empty(&mut issues, "$.providerId", &report.provider_id);
+    require_non_empty(&mut issues, "$.origin", &report.origin);
+    if report
+        .indexed_db_entries
+        .iter()
+        .any(|entry| entry.sensitive && !entry.clearable)
+    {
+        warnings.push(issue(
+            "$.indexedDbEntries",
+            "Sensitive browser storage state includes non-clearable entries",
+        ));
+    }
+    verify_contract_signature(
+        &report.signatures,
+        &expected_signature,
+        DEV_BROWSER_STORAGE_V5_SIGNATURE_PREFIX,
+        "browser storage state report",
+        &mut issues,
+        &mut warnings,
+    );
+    verification(
+        "hivemind.browser-storage-state-report-verification.v1",
+        report.report_id.clone(),
+        expected_id,
+        expected_signature,
+        issues,
+        warnings,
+    )
+}
+
 pub fn canonical_browser_storage_consent_id(
     consent: &BrowserStorageConsentV1,
 ) -> serde_json::Result<String> {
@@ -3748,6 +4908,42 @@ fn expected_dev_signature(prefix: &str, value: Value) -> serde_json::Result<Stri
     ))
 }
 
+fn browser_storage_capability_probe_signing_value(
+    probe: &BrowserStorageCapabilityProbeV1,
+) -> serde_json::Result<Value> {
+    signing_value(probe, "probeId")
+}
+
+fn browser_storage_purchase_quote_signing_value(
+    quote: &BrowserStoragePurchaseQuoteV1,
+) -> serde_json::Result<Value> {
+    signing_value(quote, "quoteId")
+}
+
+fn browser_storage_purchase_authorization_signing_value(
+    authorization: &BrowserStoragePurchaseAuthorizationV1,
+) -> serde_json::Result<Value> {
+    signing_value(authorization, "authorizationId")
+}
+
+fn browser_storage_session_v2_signing_value(
+    session: &BrowserStorageSessionV2,
+) -> serde_json::Result<Value> {
+    signing_value(session, "sessionId")
+}
+
+fn storage_event_receipt_v2_signing_value(
+    receipt: &StorageEventReceiptV2,
+) -> serde_json::Result<Value> {
+    signing_value(receipt, "receiptId")
+}
+
+fn browser_storage_state_report_signing_value(
+    report: &BrowserStorageStateReportV1,
+) -> serde_json::Result<Value> {
+    signing_value(report, "reportId")
+}
+
 fn browser_storage_consent_signing_value(
     consent: &BrowserStorageConsentV1,
 ) -> serde_json::Result<Value> {
@@ -3785,6 +4981,14 @@ fn signing_value<T: Serialize>(value: &T, id_field: &str) -> serde_json::Result<
         object.remove("signatures");
     }
     Ok(value)
+}
+
+fn ref_tail(reference: &str) -> Option<String> {
+    reference
+        .rsplit('/')
+        .next()
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn browser_security_control(
@@ -4511,23 +5715,34 @@ fn unsupported(message: &str) -> SwarmAiErrorV1 {
 #[cfg(test)]
 mod tests {
     use super::{
-        BROWSER_STORAGE_SECURITY_ASSESSMENT_REQUEST_SCHEMA_VERSION, BeeHttpStorageProvider,
-        BeeStorageConfig, BrowserServiceWorkerPolicyV1, BrowserStorageConsentActionV1,
-        BrowserStorageQuotaEstimateV1, BrowserStorageSecurityAssessmentRequestV1,
-        BrowserStorageSecurityControlKindV1, BrowserStorageSecurityControlStatusV1,
-        BrowserStorageSecurityRiskLevelV1, BrowserStorageSessionStatusV1, BrowserStorageSessionV1,
+        BROWSER_STORAGE_SECURITY_ASSESSMENT_REQUEST_SCHEMA_VERSION,
+        BROWSER_STORAGE_SESSION_V2_SCHEMA_VERSION, BeeHttpStorageProvider, BeeStorageConfig,
+        BrowserServiceWorkerPolicyV1, BrowserStorageConsentActionV1,
+        BrowserStorageEncryptionModeV1, BrowserStoragePermissionV1, BrowserStorageQuotaEstimateV1,
+        BrowserStorageSecurityAssessmentRequestV1, BrowserStorageSecurityControlKindV1,
+        BrowserStorageSecurityControlStatusV1, BrowserStorageSecurityRiskLevelV1,
+        BrowserStorageSessionStatusV1, BrowserStorageSessionV1, BrowserStorageStateEntryV1,
         BrowserSwarmProviderProfileV1, BrowserSwarmStorageMethodV4, LocalDirectoryStorageProvider,
-        StorageCostV1, StorageEventActionV1, StorageEventStatusV1, StorageProvider,
-        StorageProviderKindV3, StorageProviderKindV4, StorageTransferAuditRecordV1,
-        StorageTransferDirectionV1, StorageTransferMetricsV1, UploadResponseV1,
-        assess_browser_storage_security, browser_storage_consent, browser_storage_consent_ref,
-        browser_storage_session, browser_swarm_provider_catalog_v4,
-        default_storage_provider_descriptors_v3, list_storage_transfer_audit,
-        read_storage_transfer_audit_record, sign_browser_storage_consent,
-        sign_browser_storage_session, sign_storage_event_receipt, sign_storage_sponsorship,
-        storage_event_receipt_for_upload, storage_sponsorship, storage_transfer_audit_record,
-        verify_browser_storage_consent, verify_browser_storage_security_assessment,
-        verify_browser_storage_session, verify_storage_event_receipt, verify_storage_sponsorship,
+        StorageCostV1, StorageEventActionV1, StorageEventActionV2, StorageEventStatusV1,
+        StorageProvider, StorageProviderKindV3, StorageProviderKindV4,
+        StorageTransferAuditRecordV1, StorageTransferDirectionV1, StorageTransferMetricsV1,
+        UploadResponseV1, assess_browser_storage_security, browser_storage_capability_probe,
+        browser_storage_consent, browser_storage_consent_ref,
+        browser_storage_purchase_authorization, browser_storage_purchase_quote,
+        browser_storage_session, browser_storage_session_v2, browser_storage_state_report,
+        browser_swarm_provider_catalog_v4, default_storage_provider_descriptors_v3,
+        list_storage_transfer_audit, read_storage_transfer_audit_record,
+        sign_browser_storage_capability_probe, sign_browser_storage_consent,
+        sign_browser_storage_purchase_authorization, sign_browser_storage_purchase_quote,
+        sign_browser_storage_session, sign_browser_storage_session_v2,
+        sign_browser_storage_state_report, sign_storage_event_receipt,
+        sign_storage_event_receipt_v2, sign_storage_sponsorship, storage_event_receipt_for_upload,
+        storage_event_receipt_v2, storage_sponsorship, storage_transfer_audit_record,
+        verify_browser_storage_capability_probe, verify_browser_storage_consent,
+        verify_browser_storage_purchase_authorization, verify_browser_storage_purchase_quote,
+        verify_browser_storage_security_assessment, verify_browser_storage_session,
+        verify_browser_storage_session_v2, verify_browser_storage_state_report,
+        verify_storage_event_receipt, verify_storage_event_receipt_v2, verify_storage_sponsorship,
         write_storage_transfer_audit_record,
     };
     use serde_json::json;
@@ -4906,6 +6121,200 @@ mod tests {
                 .issues
                 .iter()
                 .any(|issue| issue.path == "$" || issue.path == "$.signatures")
+        );
+    }
+
+    #[test]
+    fn browser_storage_v5_space_purchase_session_receipts_and_state_report() {
+        let provider = browser_swarm_provider_catalog_v4()
+            .providers
+            .into_iter()
+            .find(|provider| provider.provider_kind == StorageProviderKindV4::Weeb3Browser)
+            .expect("weeb3 browser provider");
+        let mut probe = browser_storage_capability_probe(
+            &provider,
+            "Chromium",
+            "125",
+            "https://app.example",
+            Some("gnosis-mainnet".to_string()),
+            vec!["metamask".to_string()],
+            Some(10 * 1024 * 1024),
+        );
+        sign_browser_storage_capability_probe(&mut probe).unwrap();
+        let probe_verification = verify_browser_storage_capability_probe(&probe);
+        assert!(probe_verification.valid, "{probe_verification:#?}");
+
+        assert!(probe.can_start);
+        assert!(probe.can_buy_storage);
+        assert!(probe.can_upload);
+        assert!(probe.can_upload_file_list);
+        assert!(probe.can_clear_indexed_db);
+
+        let mut quote = browser_storage_purchase_quote(
+            &provider,
+            &probe,
+            1024 * 1024,
+            3600,
+            StorageCostV1 {
+                amount: 0.01,
+                currency: "xBZZ".to_string(),
+                asset: Some("BZZ".to_string()),
+            },
+            Some("100".to_string()),
+        );
+        sign_browser_storage_purchase_quote(&mut quote).unwrap();
+        let quote_verification = verify_browser_storage_purchase_quote(&quote);
+        assert!(quote_verification.valid, "{quote_verification:#?}");
+
+        let mut authorization = browser_storage_purchase_authorization(
+            &quote,
+            "0x0000000000000000000000000000000000000001",
+            true,
+            "Allow this app to buy 1 MiB of Swarm storage.",
+        );
+        sign_browser_storage_purchase_authorization(&mut authorization).unwrap();
+        let authorization_verification =
+            verify_browser_storage_purchase_authorization(&authorization);
+        assert!(
+            authorization_verification.valid,
+            "{authorization_verification:#?}"
+        );
+
+        let mut session = browser_storage_session_v2(
+            &provider,
+            &probe,
+            Some(&authorization),
+            quote.requested_bytes,
+            quote.duration_seconds,
+        );
+        sign_browser_storage_session_v2(&mut session).unwrap();
+        let session_verification = verify_browser_storage_session_v2(&session);
+        assert!(session_verification.valid, "{session_verification:#?}");
+        assert_eq!(
+            session.schema_version,
+            BROWSER_STORAGE_SESSION_V2_SCHEMA_VERSION
+        );
+        assert_eq!(session.status, BrowserStorageSessionStatusV1::Active);
+        assert!(
+            session
+                .permissions
+                .contains(&BrowserStoragePermissionV1::BuyStorage)
+        );
+        assert!(
+            session
+                .permissions
+                .contains(&BrowserStoragePermissionV1::Upload)
+        );
+
+        let mut receipt = storage_event_receipt_v2(
+            &session,
+            StorageEventActionV2::Upload,
+            Some("bzz://browser-upload".to_string()),
+            Some("sha256:browser-upload-content".to_string()),
+            128,
+            BrowserStorageEncryptionModeV1::ClientSide,
+            StorageEventStatusV1::Succeeded,
+            None,
+        );
+        sign_storage_event_receipt_v2(&mut receipt).unwrap();
+        let receipt_verification = verify_storage_event_receipt_v2(&receipt);
+        assert!(receipt_verification.valid, "{receipt_verification:#?}");
+        assert_eq!(
+            receipt.authorization_id.as_deref(),
+            Some(authorization.authorization_id.as_str())
+        );
+        assert_eq!(
+            receipt.session_id.as_deref(),
+            Some(session.session_id.as_str())
+        );
+
+        let mut report = browser_storage_state_report(
+            &session,
+            vec![BrowserStorageStateEntryV1 {
+                state_kind: "indexed_db".to_string(),
+                key_ref: "indexeddb://hivemind/storage-session".to_string(),
+                sensitive: true,
+                clearable: true,
+                size_bytes: Some(2048),
+            }],
+            vec!["/app/swarm-upload/".to_string()],
+        );
+        sign_browser_storage_state_report(&mut report).unwrap();
+        let report_verification = verify_browser_storage_state_report(&report);
+        assert!(report_verification.valid, "{report_verification:#?}");
+        assert!(
+            report
+                .report_id
+                .starts_with("browser-storage-state-report-")
+        );
+        assert_eq!(report.active_session_refs.len(), 1);
+        assert!(report.clear_state_supported);
+        assert!(report.warnings.is_empty(), "{report:#?}");
+
+        let mut failed_receipt = storage_event_receipt_v2(
+            &session,
+            StorageEventActionV2::Upload,
+            None,
+            None,
+            0,
+            BrowserStorageEncryptionModeV1::ClientSide,
+            StorageEventStatusV1::Failed,
+            None,
+        );
+        sign_storage_event_receipt_v2(&mut failed_receipt).unwrap();
+        let failed_verification = verify_storage_event_receipt_v2(&failed_receipt);
+        assert!(!failed_verification.valid);
+        assert!(
+            failed_verification
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.error")
+        );
+    }
+
+    #[test]
+    fn browser_storage_v5_quote_validation_flags_missing_purchase_bounds() {
+        let provider = browser_swarm_provider_catalog_v4()
+            .providers
+            .into_iter()
+            .find(|provider| provider.provider_kind == StorageProviderKindV4::Weeb3Browser)
+            .expect("weeb3 browser provider");
+        let probe = browser_storage_capability_probe(
+            &provider,
+            "Chromium",
+            "125",
+            "https://app.example",
+            Some("gnosis-mainnet".to_string()),
+            vec!["metamask".to_string()],
+            Some(10 * 1024 * 1024),
+        );
+        let mut quote = browser_storage_purchase_quote(
+            &provider,
+            &probe,
+            0,
+            0,
+            StorageCostV1 {
+                amount: -1.0,
+                currency: String::new(),
+                asset: None,
+            },
+            Some("100".to_string()),
+        );
+        sign_browser_storage_purchase_quote(&mut quote).unwrap();
+
+        let verification = verify_browser_storage_purchase_quote(&quote);
+        assert!(!verification.valid);
+        assert!(
+            verification
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.requestedBytes")
+        );
+        assert!(
+            verification
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.estimatedCost.currency")
         );
     }
 

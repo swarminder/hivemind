@@ -1,9 +1,12 @@
-use crate::access::AccessGrantV1;
+use crate::access::{
+    AccessGrantV1, AccessGrantV2, AccessScopeV1, AccessSubjectTypeV1, AccessSubjectV1,
+};
 use crate::canonical::{canonicalize_json, hash_canonical_json};
 use crate::errors::{ErrorCode, SwarmAiErrorV1};
 use crate::execution::{ExecutionOptions, ExecutionPrivacy, ExecutionRequestV1, ReceiptMode};
 use crate::runner::{RunnerCapabilityV1, RunnerPriceEntryV1};
 use crate::trust::{DataRetentionRule, IntegrityTier, LoggingRule, PrivacyTier};
+use crate::validation::ValidationIssue;
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,6 +17,7 @@ pub const JOB_QUOTE_SCHEMA_VERSION: &str = "hivemind.quote.v1";
 pub const EXECUTION_LEASE_SCHEMA_VERSION: &str = "hivemind.execution_lease.v1";
 pub const EXECUTION_LEASE_REQUEST_SCHEMA_VERSION: &str = "hivemind.execution_lease_request.v1";
 pub const STREAMING_EVENT_SCHEMA_VERSION: &str = "hivemind.stream_event.v1";
+pub const JOB_ACCESS_ATTACHMENT_SCHEMA_VERSION: &str = "hivemind.job_access_attachment.v1";
 pub const LEGACY_JOB_ORDER_SCHEMA_VERSION: &str = "swarm-ai.job-order.v1";
 pub const LEGACY_JOB_QUOTE_SCHEMA_VERSION: &str = "swarm-ai.job-quote.v1";
 pub const LEGACY_EXECUTION_LEASE_SCHEMA_VERSION: &str = "swarm-ai.execution-lease.v1";
@@ -233,6 +237,39 @@ pub struct JobOrderV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct JobAccessAttachmentV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "attachmentId")]
+    pub attachment_id: String,
+    #[serde(rename = "originalJobId")]
+    pub original_job_id: String,
+    #[serde(rename = "updatedJobId")]
+    pub updated_job_id: String,
+    #[serde(rename = "grantId")]
+    pub grant_id: String,
+    #[serde(rename = "accessGrantRef")]
+    pub access_grant_ref: String,
+    #[serde(
+        rename = "paymentRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub payment_ref: Option<String>,
+    #[serde(
+        rename = "settlementRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub settlement_ref: Option<String>,
+    #[serde(rename = "jobOrder")]
+    pub job_order: JobOrderV1,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct JobQuoteV1 {
     #[serde(rename = "schemaVersion")]
     pub schema_version: String,
@@ -407,6 +444,112 @@ pub fn job_order_from_execution_request(
     };
     order.job_id = canonical_job_order_id(&order).expect("job order should serialize for id");
     order
+}
+
+pub fn attach_access_grant_v2_to_job_order(
+    order: &JobOrderV1,
+    grant: &AccessGrantV2,
+) -> JobAccessAttachmentV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let access_grant_ref = access_grant_v2_ref(grant);
+
+    if grant.grant_id.trim().is_empty() {
+        issues.push(job_access_issue(
+            "$.grant.grantId",
+            "Access grant id is required",
+        ));
+    }
+    if grant.grantee.trim().is_empty() {
+        issues.push(job_access_issue(
+            "$.grant.grantee",
+            "Access grant grantee is required",
+        ));
+    } else if grant.grantee != order.requester {
+        issues.push(job_access_issue(
+            "$.grant.grantee",
+            "Access grant grantee must match job order requester",
+        ));
+    }
+    if grant.scopes.is_empty() {
+        issues.push(job_access_issue(
+            "$.grant.scopes",
+            "Access grant must include at least one job-relevant scope",
+        ));
+    } else if !grant.scopes.iter().any(job_access_scope_allows_execution) {
+        issues.push(job_access_issue(
+            "$.grant.scopes",
+            "Access grant must allow read_asset, execute_package, run_service, use_dataset, use_vector_store, or use_tool for a job",
+        ));
+    }
+    if grant.subjects.is_empty() {
+        issues.push(job_access_issue(
+            "$.grant.subjects",
+            "Access grant must include at least one subject",
+        ));
+    } else if !grant
+        .subjects
+        .iter()
+        .any(|subject| access_subject_matches_job_order(subject, order))
+    {
+        issues.push(job_access_issue(
+            "$.grant.subjects",
+            "Access grant subjects do not cover the job package",
+        ));
+    }
+    if grant.signatures.is_empty() {
+        issues.push(job_access_issue(
+            "$.grant.signatures",
+            "Access grant must be signed before it is attached to a job",
+        ));
+    }
+    if let Some(expires_at) = grant.expires_at.as_deref() {
+        match DateTime::parse_from_rfc3339(expires_at) {
+            Ok(expires_at) if expires_at.with_timezone(&Utc) <= Utc::now() => issues.push(
+                job_access_issue("$.grant.expiresAt", "Access grant has expired"),
+            ),
+            Ok(_) => {}
+            Err(error) => issues.push(job_access_issue(
+                "$.grant.expiresAt",
+                format!("Access grant expiresAt must be RFC3339: {error}"),
+            )),
+        }
+    }
+    if order.access_grant_ref.as_deref() == Some(access_grant_ref.as_str()) {
+        warnings.push(job_access_issue(
+            "$.jobOrder.accessGrantRef",
+            "Job order already references this access grant",
+        ));
+    } else if order.access_grant_ref.is_some() {
+        warnings.push(job_access_issue(
+            "$.jobOrder.accessGrantRef",
+            "Existing job accessGrantRef was replaced by the supplied grant",
+        ));
+    }
+
+    let mut job_order = order.clone();
+    job_order.access_grant_ref = Some(access_grant_ref.clone());
+    job_order.signature = None;
+    job_order.job_id = canonical_job_order_id(&job_order)
+        .unwrap_or_else(|_| "job-access-attachment-invalid-job".to_string());
+
+    let mut attachment = JobAccessAttachmentV1 {
+        schema_version: JOB_ACCESS_ATTACHMENT_SCHEMA_VERSION.to_string(),
+        attachment_id: String::new(),
+        original_job_id: order.job_id.clone(),
+        updated_job_id: job_order.job_id.clone(),
+        grant_id: grant.grant_id.clone(),
+        access_grant_ref,
+        payment_ref: grant.payment_ref.clone(),
+        settlement_ref: grant.settlement_ref.clone(),
+        job_order,
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+    };
+    attachment.attachment_id = canonical_job_access_attachment_id(&attachment)
+        .unwrap_or_else(|_| "job-access-attachment-invalid".to_string());
+    attachment
 }
 
 pub fn execution_lease_from_quote(
@@ -828,6 +971,14 @@ pub fn canonical_job_order_id(order: &JobOrderV1) -> serde_json::Result<String> 
     stable_contract_id("job", &unsigned)
 }
 
+pub fn canonical_job_access_attachment_id(
+    attachment: &JobAccessAttachmentV1,
+) -> serde_json::Result<String> {
+    let mut unsigned = attachment.clone();
+    unsigned.attachment_id.clear();
+    stable_contract_id("job-access-attachment", &unsigned)
+}
+
 pub fn canonical_job_quote_id(quote: &JobQuoteV1) -> serde_json::Result<String> {
     let mut unsigned = quote.clone();
     unsigned.quote_id.clear();
@@ -924,6 +1075,59 @@ fn access_grant_ref(grant: &AccessGrantV1) -> String {
     }
 }
 
+fn access_grant_v2_ref(grant: &AccessGrantV2) -> String {
+    if !grant.grant_id.trim().is_empty() {
+        grant.grant_id.clone()
+    } else if let Some(signature) = grant.signatures.first() {
+        signature.clone()
+    } else {
+        "local://access-grants/unsigned-v2".to_string()
+    }
+}
+
+fn job_access_scope_allows_execution(scope: &AccessScopeV1) -> bool {
+    matches!(
+        scope,
+        AccessScopeV1::ReadAsset
+            | AccessScopeV1::ExecutePackage
+            | AccessScopeV1::RunService
+            | AccessScopeV1::UseDataset
+            | AccessScopeV1::UseVectorStore
+            | AccessScopeV1::UseTool
+    )
+}
+
+fn access_subject_matches_job_order(subject: &AccessSubjectV1, order: &JobOrderV1) -> bool {
+    let subject_id_matches = subject.subject_id == order.package_id
+        || subject.subject_id == order.package_ref
+        || order
+            .preferred_artifact_group
+            .as_ref()
+            .is_some_and(|artifact_group| subject.subject_id == *artifact_group);
+    let ref_matches = subject.refs.iter().any(|reference| {
+        reference == &order.package_ref
+            || reference == &order.package_id
+            || reference.starts_with(&format!("package://{}/", order.package_id))
+    });
+    if subject_id_matches || ref_matches {
+        return true;
+    }
+    matches!(
+        subject.subject_type,
+        AccessSubjectTypeV1::Package | AccessSubjectTypeV1::Asset | AccessSubjectTypeV1::Service
+    ) && subject
+        .namespace
+        .as_deref()
+        .is_some_and(|namespace| namespace == order.package_id)
+}
+
+fn job_access_issue(path: impl Into<String>, message: impl Into<String>) -> ValidationIssue {
+    ValidationIssue {
+        path: path.into(),
+        message: message.into(),
+    }
+}
+
 fn stable_contract_id(prefix: &str, value: &impl Serialize) -> serde_json::Result<String> {
     let value = serde_json::to_value(value)?;
     Ok(format!(
@@ -1016,6 +1220,128 @@ mod tests {
         assert_eq!(
             left_order.required_verification_tier,
             IntegrityTier::ReceiptOnly
+        );
+    }
+
+    #[test]
+    fn access_grant_v2_attachment_recanonicalizes_job_order_and_carries_payment_refs() {
+        let request = request_with_input(json!({ "text": "hello" }));
+        let order =
+            job_order_from_execution_request(&request, "local-dev", ApiSurface::HivemindNative);
+        let grant = AccessGrantV2 {
+            schema_version: "hivemind.access-grant.v2".to_string(),
+            grant_id: "access-grant-paid-model".to_string(),
+            issuer: "publisher".to_string(),
+            grantee: "local-dev".to_string(),
+            scopes: vec![AccessScopeV1::ReadAsset, AccessScopeV1::ExecutePackage],
+            subjects: vec![AccessSubjectV1 {
+                subject_id: "hivemind/test".to_string(),
+                subject_type: AccessSubjectTypeV1::Package,
+                refs: vec!["bzz://pkg".to_string()],
+                asset_class: Some("package".to_string()),
+                content_hash: None,
+                namespace: None,
+            }],
+            allowed_uses: vec!["runner-service".to_string()],
+            constraints: json!({}),
+            issued_at: "2026-06-05T00:00:00Z".to_string(),
+            expires_at: Some("2100-01-01T00:00:00Z".to_string()),
+            runner_id: None,
+            revocation_list_ref: None,
+            payment_ref: Some("local://payments/auth-1".to_string()),
+            settlement_ref: Some("local://settlements/settlement-1".to_string()),
+            evidence_refs: vec!["bzz://quote-evidence".to_string()],
+            signatures: vec!["dev-access-grant-v2-signature-v1:test".to_string()],
+        };
+
+        let attachment = attach_access_grant_v2_to_job_order(&order, &grant);
+
+        assert!(attachment.valid, "{attachment:#?}");
+        assert_eq!(
+            attachment.schema_version,
+            JOB_ACCESS_ATTACHMENT_SCHEMA_VERSION
+        );
+        assert_eq!(attachment.original_job_id, order.job_id);
+        assert_ne!(attachment.updated_job_id, attachment.original_job_id);
+        assert_eq!(
+            attachment.job_order.access_grant_ref.as_deref(),
+            Some("access-grant-paid-model")
+        );
+        assert_eq!(
+            attachment.payment_ref.as_deref(),
+            Some("local://payments/auth-1")
+        );
+        assert_eq!(
+            attachment.settlement_ref.as_deref(),
+            Some("local://settlements/settlement-1")
+        );
+        assert_eq!(
+            attachment.job_order.job_id,
+            canonical_job_order_id(&attachment.job_order).unwrap()
+        );
+        assert_eq!(
+            attachment.attachment_id,
+            canonical_job_access_attachment_id(&attachment).unwrap()
+        );
+    }
+
+    #[test]
+    fn access_grant_v2_attachment_reports_mismatch_and_expiry() {
+        let request = request_with_input(json!({ "text": "hello" }));
+        let order =
+            job_order_from_execution_request(&request, "local-dev", ApiSurface::HivemindNative);
+        let grant = AccessGrantV2 {
+            schema_version: "hivemind.access-grant.v2".to_string(),
+            grant_id: "access-grant-other".to_string(),
+            issuer: "publisher".to_string(),
+            grantee: "other-user".to_string(),
+            scopes: vec![AccessScopeV1::ViewReceipt],
+            subjects: vec![AccessSubjectV1 {
+                subject_id: "other/package".to_string(),
+                subject_type: AccessSubjectTypeV1::Package,
+                refs: vec!["bzz://other".to_string()],
+                asset_class: None,
+                content_hash: None,
+                namespace: None,
+            }],
+            allowed_uses: vec!["runner-service".to_string()],
+            constraints: json!({}),
+            issued_at: "2026-06-05T00:00:00Z".to_string(),
+            expires_at: Some("2026-05-01T00:00:00Z".to_string()),
+            runner_id: None,
+            revocation_list_ref: None,
+            payment_ref: None,
+            settlement_ref: None,
+            evidence_refs: Vec::new(),
+            signatures: Vec::new(),
+        };
+
+        let attachment = attach_access_grant_v2_to_job_order(&order, &grant);
+
+        assert!(!attachment.valid);
+        assert!(
+            attachment
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.grant.grantee")
+        );
+        assert!(
+            attachment
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.grant.subjects")
+        );
+        assert!(
+            attachment
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.grant.expiresAt")
+        );
+        assert!(
+            attachment
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.grant.signatures")
         );
     }
 

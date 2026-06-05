@@ -171,6 +171,29 @@ struct AccessPolicyProjectRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct RequestPaidAccessRequest {
+    listing: hivemind_marketplace::MarketplaceListingV2,
+    requester: String,
+    #[serde(rename = "requestedUse", default)]
+    requested_use: Option<String>,
+    #[serde(rename = "assetRef", default)]
+    asset_ref: Option<String>,
+    #[serde(default)]
+    amount: Option<f64>,
+    #[serde(default)]
+    currency: Option<String>,
+    #[serde(rename = "expiresAt", default)]
+    expires_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AttachAccessGrantToJobRequest {
+    #[serde(rename = "jobOrder")]
+    job_order: hivemind_core::JobOrderV1,
+    grant: hivemind_core::AccessGrantV2,
+}
+
+#[derive(Debug, Deserialize)]
 struct CompatibilityPackageCertificationRequest {
     #[serde(rename = "schemaVersion", default)]
     schema_version: Option<String>,
@@ -750,8 +773,20 @@ fn router(state: AppState, static_dir: PathBuf) -> Router {
         .route("/v1/access/verify-grant", post(verify_access_grant))
         .route("/v1/access/sign-grant-v2", post(sign_access_grant_v2))
         .route("/v1/access/verify-grant-v2", post(verify_access_grant_v2))
+        .route("/v1/access/sign-grant-v3", post(sign_access_grant_v3))
+        .route("/v1/access/verify-grant-v3", post(verify_access_grant_v3))
         .route("/v1/access/policy/project", post(project_access_policy))
         .route("/v1/access/policy/verify", post(verify_access_policy))
+        .route(
+            "/v1/access/policy/project-v2",
+            post(project_access_policy_v2),
+        )
+        .route("/v1/access/policy/verify-v2", post(verify_access_policy_v2))
+        .route("/v1/access/request-paid-access", post(request_paid_access))
+        .route(
+            "/v1/access/attach-grant-to-job",
+            post(attach_access_grant_to_job),
+        )
         .route("/v1/access/grants", get(access_grants))
         .route("/v1/access/grants/{grant_id}", get(access_grant_by_id))
         .route("/v1/access/revoke-grant", post(revoke_access_grant))
@@ -1293,6 +1328,30 @@ fn router(state: AppState, static_dir: PathBuf) -> Router {
             post(verify_access_grant_v2),
         )
         .route(
+            "/v1/swarm-ai/access/sign-grant-v3",
+            post(sign_access_grant_v3),
+        )
+        .route(
+            "/v1/swarm-ai/access/verify-grant-v3",
+            post(verify_access_grant_v3),
+        )
+        .route(
+            "/v1/swarm-ai/access/policy/project-v2",
+            post(project_access_policy_v2),
+        )
+        .route(
+            "/v1/swarm-ai/access/policy/verify-v2",
+            post(verify_access_policy_v2),
+        )
+        .route(
+            "/v1/swarm-ai/access/request-paid-access",
+            post(request_paid_access),
+        )
+        .route(
+            "/v1/swarm-ai/access/attach-grant-to-job",
+            post(attach_access_grant_to_job),
+        )
+        .route(
             "/v1/swarm-ai/ai/verify-request",
             post(hivemind_ai_verify_request),
         )
@@ -1517,6 +1576,30 @@ fn router(state: AppState, static_dir: PathBuf) -> Router {
         .route(
             "/v1/hivemind/access/verify-grant-v2",
             post(verify_access_grant_v2),
+        )
+        .route(
+            "/v1/hivemind/access/sign-grant-v3",
+            post(sign_access_grant_v3),
+        )
+        .route(
+            "/v1/hivemind/access/verify-grant-v3",
+            post(verify_access_grant_v3),
+        )
+        .route(
+            "/v1/hivemind/access/policy/project-v2",
+            post(project_access_policy_v2),
+        )
+        .route(
+            "/v1/hivemind/access/policy/verify-v2",
+            post(verify_access_policy_v2),
+        )
+        .route(
+            "/v1/hivemind/access/request-paid-access",
+            post(request_paid_access),
+        )
+        .route(
+            "/v1/hivemind/access/attach-grant-to-job",
+            post(attach_access_grant_to_job),
         )
         .route(
             "/v1/hivemind/ai/verify-request",
@@ -2055,6 +2138,90 @@ async fn verify_access_policy(
     Json(hivemind_core::verify_access_policy(&policy))
 }
 
+async fn project_access_policy_v2(
+    Json(request): Json<AccessPolicyProjectRequest>,
+) -> Json<hivemind_core::AccessPolicyV2> {
+    Json(
+        hivemind_core::access_policy_v2_from_license_policy_with_context(
+            &request.license_policy,
+            request.context,
+        ),
+    )
+}
+
+async fn verify_access_policy_v2(
+    Json(policy): Json<hivemind_core::AccessPolicyV2>,
+) -> Json<hivemind_core::AccessPolicyV2VerificationV1> {
+    Json(hivemind_core::verify_access_policy_v2(&policy))
+}
+
+async fn request_paid_access(Json(request): Json<RequestPaidAccessRequest>) -> impl IntoResponse {
+    let listing_verification =
+        hivemind_marketplace::verify_marketplace_listing_v2(&request.listing);
+    if !listing_verification.valid {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json_error(
+                ErrorCode::InvalidRequest,
+                "Marketplace listing v2 is not valid for paid access",
+            )),
+        )
+            .into_response();
+    }
+    let policy = match access_policy_v2_for_marketplace_listing(&request.listing) {
+        Ok(policy) => policy,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json_error(ErrorCode::InvalidRequest, &error)),
+            )
+                .into_response();
+        }
+    };
+    let listing_ref = Some(format!(
+        "local://marketplace/listings/{}",
+        request.listing.listing_id
+    ));
+    let requester = request.requester;
+    let requested_use = request
+        .requested_use
+        .unwrap_or_else(|| requested_use_for_marketplace_listing(&request.listing).to_string());
+    let asset_ref = request
+        .asset_ref
+        .or_else(|| Some(request.listing.subject.subject_ref.clone()));
+    let amount = request
+        .amount
+        .or(Some(request.listing.price_model.base_price));
+    let currency = request
+        .currency
+        .or_else(|| Some(request.listing.price_model.currency.clone()));
+    let expires_at = request
+        .expires_at
+        .or_else(|| request.listing.expires_at.clone());
+    let evidence_refs = request.listing.evidence_refs.clone();
+    let quote = hivemind_core::paid_access_quote_with_listing_ref(
+        &policy,
+        requester,
+        requested_use,
+        asset_ref,
+        amount,
+        currency,
+        expires_at,
+        listing_ref,
+        evidence_refs,
+    );
+    (StatusCode::OK, Json(json!(quote))).into_response()
+}
+
+async fn attach_access_grant_to_job(
+    Json(request): Json<AttachAccessGrantToJobRequest>,
+) -> Json<hivemind_core::JobAccessAttachmentV1> {
+    Json(hivemind_core::attach_access_grant_v2_to_job_order(
+        &request.job_order,
+        &request.grant,
+    ))
+}
+
 async fn verify_access_grant(
     Json(grant): Json<hivemind_core::AccessGrantV1>,
 ) -> Json<hivemind_access::AccessGrantVerificationV1> {
@@ -2081,6 +2248,28 @@ async fn verify_access_grant_v2(
     Json(grant): Json<hivemind_core::AccessGrantV2>,
 ) -> Json<hivemind_access::AccessGrantV2VerificationV1> {
     Json(hivemind_access::verify_access_grant_v2(&grant))
+}
+
+async fn sign_access_grant_v3(
+    Json(mut grant): Json<hivemind_core::AccessGrantV3>,
+) -> impl IntoResponse {
+    match hivemind_access::sign_access_grant_v3(&mut grant) {
+        Ok(_) => (StatusCode::OK, Json(json!(grant))).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(json_error(
+                ErrorCode::InvalidRequest,
+                &format!("Failed to sign access grant v3: {error}"),
+            )),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_access_grant_v3(
+    Json(grant): Json<hivemind_core::AccessGrantV3>,
+) -> Json<hivemind_access::AccessGrantV3VerificationV1> {
+    Json(hivemind_access::verify_access_grant_v3(&grant))
 }
 
 async fn access_grants(State(state): State<AppState>) -> impl IntoResponse {
@@ -5152,6 +5341,121 @@ async fn marketplace_verify_listing_v2(
     Json(hivemind_marketplace::verify_marketplace_listing_v2(
         &listing,
     ))
+}
+
+fn access_policy_v2_for_marketplace_listing(
+    listing: &hivemind_marketplace::MarketplaceListingV2,
+) -> Result<hivemind_core::AccessPolicyV2, String> {
+    if let Ok(policy) =
+        serde_json::from_value::<hivemind_core::AccessPolicyV2>(listing.access_policy.clone())
+    {
+        let verification = hivemind_core::verify_access_policy_v2(&policy);
+        if verification.valid {
+            return Ok(policy);
+        }
+    }
+    let package_ref = listing.subject.subject_ref.trim();
+    if package_ref.is_empty() {
+        return Err("Marketplace listing subjectRef is required for paid access".to_string());
+    }
+    let license_type = license_type_for_marketplace_paid_access(listing);
+    let requires_access_grant =
+        listing.price_model.base_price > 0.0 || !matches!(license_type, LicenseType::Open);
+    let license_policy = hivemind_core::LicensePolicyV1 {
+        schema_version: "swarm-ai.license-policy.v1".to_string(),
+        package_id: listing
+            .subject
+            .package_id
+            .clone()
+            .unwrap_or_else(|| format!("marketplace/{}", listing.listing_id)),
+        package_ref: package_ref.to_string(),
+        license_type: license_type.clone(),
+        allowed_uses: allowed_uses_for_marketplace_listing(listing),
+        restricted_uses: vec!["redistribution".to_string()],
+        requires_access_grant,
+        terms_ref: listing.description_ref.clone(),
+        access_control: hivemind_core::AccessControlV1 {
+            mode: if requires_access_grant {
+                hivemind_core::AccessControlMode::EncryptedRef
+            } else {
+                hivemind_core::AccessControlMode::None
+            },
+            act_ref: None,
+        },
+    };
+    let mut policy = hivemind_core::access_policy_v2_from_license_policy(&license_policy);
+    let settlement_ref = json_path_str(&listing.settlement_terms, &["settlementRef"])
+        .or_else(|| json_path_str(&listing.settlement_terms, &["settlement", "settlementRef"]))
+        .map(str::to_string);
+    policy.payment_requirement.required = listing.price_model.base_price > 0.0
+        || matches!(
+            listing.price_model.mode,
+            hivemind_marketplace::PricingMode::PayPerCall
+                | hivemind_marketplace::PricingMode::PayPerToken
+                | hivemind_marketplace::PricingMode::Subscription
+                | hivemind_marketplace::PricingMode::Quote
+        );
+    policy.payment_requirement.asset = Some(listing.price_model.currency.clone());
+    policy.payment_requirement.amount = Some(listing.price_model.base_price);
+    policy.payment_requirement.settlement_ref = settlement_ref.clone();
+    policy.settlement_ref = settlement_ref;
+    policy.evidence_refs = listing.evidence_refs.clone();
+    policy.policy_id = hivemind_core::canonical_access_policy_v2_id(&policy)
+        .map_err(|error| format!("Failed to canonicalize listing access policy: {error}"))?;
+    Ok(policy)
+}
+
+fn license_type_for_marketplace_paid_access(
+    listing: &hivemind_marketplace::MarketplaceListingV2,
+) -> LicenseType {
+    if matches!(
+        listing.listing_type,
+        hivemind_marketplace::MarketplaceListingKindV2::PackageSubscription
+    ) || matches!(
+        listing.price_model.mode,
+        hivemind_marketplace::PricingMode::Subscription
+    ) {
+        LicenseType::Subscription
+    } else if listing.price_model.base_price <= 0.0
+        && matches!(
+            listing.price_model.mode,
+            hivemind_marketplace::PricingMode::Free
+        )
+    {
+        LicenseType::Open
+    } else {
+        LicenseType::Commercial
+    }
+}
+
+fn allowed_uses_for_marketplace_listing(
+    listing: &hivemind_marketplace::MarketplaceListingV2,
+) -> Vec<String> {
+    match listing.listing_type {
+        hivemind_marketplace::MarketplaceListingKindV2::DatasetLicense => {
+            vec!["research".to_string(), "validation".to_string()]
+        }
+        hivemind_marketplace::MarketplaceListingKindV2::BenchmarkBounty
+        | hivemind_marketplace::MarketplaceListingKindV2::ResearchGrant => {
+            vec!["research".to_string(), "validation".to_string()]
+        }
+        _ => vec![
+            "commercial".to_string(),
+            "runner-service".to_string(),
+            "validation".to_string(),
+        ],
+    }
+}
+
+fn requested_use_for_marketplace_listing(
+    listing: &hivemind_marketplace::MarketplaceListingV2,
+) -> &'static str {
+    match listing.listing_type {
+        hivemind_marketplace::MarketplaceListingKindV2::DatasetLicense
+        | hivemind_marketplace::MarketplaceListingKindV2::BenchmarkBounty
+        | hivemind_marketplace::MarketplaceListingKindV2::ResearchGrant => "research",
+        _ => "commercial",
+    }
 }
 
 async fn marketplace_offers(State(state): State<AppState>) -> Json<Vec<RunnerOfferV1>> {

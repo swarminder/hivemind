@@ -12521,6 +12521,24 @@ fn schema_command(kind: &str) -> Result<()> {
         "clear-state-receipt" => {
             serde_json::to_value(schema_for!(hivemind_storage::ClearStateReceiptV1))?
         }
+        "browser-storage-capability-probe" => serde_json::to_value(schema_for!(
+            hivemind_storage::BrowserStorageCapabilityProbeV1
+        ))?,
+        "browser-storage-purchase-quote" => {
+            serde_json::to_value(schema_for!(hivemind_storage::BrowserStoragePurchaseQuoteV1))?
+        }
+        "browser-storage-purchase-authorization" => serde_json::to_value(schema_for!(
+            hivemind_storage::BrowserStoragePurchaseAuthorizationV1
+        ))?,
+        "browser-storage-session-v2" => {
+            serde_json::to_value(schema_for!(hivemind_storage::BrowserStorageSessionV2))?
+        }
+        "storage-event-receipt-v2" => {
+            serde_json::to_value(schema_for!(hivemind_storage::StorageEventReceiptV2))?
+        }
+        "browser-storage-state-report" => {
+            serde_json::to_value(schema_for!(hivemind_storage::BrowserStorageStateReportV1))?
+        }
         "storage-cost" => serde_json::to_value(schema_for!(hivemind_storage::StorageCostV1))?,
         "browser-storage-consent" => {
             serde_json::to_value(schema_for!(hivemind_storage::BrowserStorageConsentV1))?
@@ -12560,6 +12578,7 @@ fn schema_command(kind: &str) -> Result<()> {
         }
         "access-grant" => serde_json::to_value(schema_for!(hivemind_core::AccessGrantV1))?,
         "access-grant-v2" => serde_json::to_value(schema_for!(hivemind_core::AccessGrantV2))?,
+        "access-grant-v3" => serde_json::to_value(schema_for!(hivemind_core::AccessGrantV3))?,
         "access-scope" => serde_json::to_value(schema_for!(hivemind_core::AccessScopeV1))?,
         "access-subject" => serde_json::to_value(schema_for!(hivemind_core::AccessSubjectV1))?,
         "access-subject-type" => {
@@ -12570,6 +12589,9 @@ fn schema_command(kind: &str) -> Result<()> {
         }
         "access-grant-v2-verification" => {
             serde_json::to_value(schema_for!(hivemind_access::AccessGrantV2VerificationV1))?
+        }
+        "access-grant-v3-verification" => {
+            serde_json::to_value(schema_for!(hivemind_access::AccessGrantV3VerificationV1))?
         }
         "access-grant-store-summary" => {
             serde_json::to_value(schema_for!(hivemind_access::AccessGrantStoreSummaryV1))?
@@ -12599,8 +12621,21 @@ fn schema_command(kind: &str) -> Result<()> {
         "access-policy-verification" => {
             serde_json::to_value(schema_for!(hivemind_core::AccessPolicyVerificationV1))?
         }
+        "access-policy-v2" => serde_json::to_value(schema_for!(hivemind_core::AccessPolicyV2))?,
+        "access-policy-v2-verification" => {
+            serde_json::to_value(schema_for!(hivemind_core::AccessPolicyV2VerificationV1))?
+        }
+        "asset-access-rule" => serde_json::to_value(schema_for!(hivemind_core::AssetAccessRuleV1))?,
+        "asset-access-rule-v2" => {
+            serde_json::to_value(schema_for!(hivemind_core::AssetAccessRuleV2))?
+        }
+        "paid-access-quote" => serde_json::to_value(schema_for!(hivemind_core::PaidAccessQuoteV1))?,
+        "access-evaluation-result" => {
+            serde_json::to_value(schema_for!(hivemind_core::AccessEvaluationResultV1))?
+        }
         "access-request" => serde_json::to_value(schema_for!(hivemind_core::AccessRequestV1))?,
         "license-policy" => serde_json::to_value(schema_for!(hivemind_core::LicensePolicyV1))?,
+        "license-policy-v2" => serde_json::to_value(schema_for!(hivemind_core::LicensePolicyV2))?,
         "policy-decision" => serde_json::to_value(schema_for!(hivemind_core::PolicyDecisionV1))?,
         "privacy-tier-profile" => {
             serde_json::to_value(schema_for!(hivemind_core::PrivacyTierProfileV1))?
@@ -13436,6 +13471,9 @@ fn schema_command(kind: &str) -> Result<()> {
             serde_json::to_value(schema_for!(hivemind_core::RunnerCapabilityV2))?
         }
         "job-order" => serde_json::to_value(schema_for!(hivemind_core::JobOrderV1))?,
+        "job-access-attachment" => {
+            serde_json::to_value(schema_for!(hivemind_core::JobAccessAttachmentV1))?
+        }
         "job-record" => serde_json::to_value(schema_for!(hivemind_jobs::JobRecordV1))?,
         "job-store-summary" => serde_json::to_value(schema_for!(hivemind_jobs::JobStoreSummaryV1))?,
         "job-lookup" => serde_json::to_value(schema_for!(hivemind_jobs::JobLookupResultV1))?,

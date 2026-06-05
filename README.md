@@ -30,7 +30,7 @@ The repository is a single Cargo workspace with separate crates for the major R&
 - `hivemind-package`: PackageManifestV1 scaffolding, v02 manifest projection support, folder loading, path validation, and compact package validation audit records with manifest parse and validation timing summaries.
 - `hivemind-publisher`: publisher dry-run, deterministic local-dev signing, Ed25519 publication signatures, PublicationRecordV1 verification, local publication/feed audit indexing, and local feed updates/resolution.
 - `hivemind-registry`: local registry indexing, grant-aware paginated search, compact search audit records with latency summaries, v0.2 discovery filters for modality, API surface, privacy, verification, browser, GPU, size, validation, and price hints, signed publication/feed trust evidence, package detail lookup, public snapshot filtering, and mirrorable facet shard output/verification.
-- `hivemind-storage`: StorageProvider trait, in-memory provider, local directory storage, Bee HTTP storage, browser-native provider descriptors, explicit browser storage consent/session/receipt/security-assessment contracts, transfer timing metrics, storage transfer audit summaries, cache inspection, feed pointer operations, and pin/unpin support.
+- `hivemind-storage`: StorageProvider trait, in-memory provider, local directory storage, Bee HTTP storage, browser-native provider descriptors, explicit browser storage consent/session/receipt/security-assessment contracts, review-5 capability probe, purchase quote/authorization, v2 session, v2 receipt, and browser state report objects, transfer timing metrics, storage transfer audit summaries, cache inspection, feed pointer operations, and pin/unpin support.
 - `hivemind-weeb3-adapter`: browser Swarm/weeb-3 provider contract, fallback retrieval, cache status, and compatibility/security reports.
 - `hivemind-browser-runner`: browser capability detection, artifact selection, prepare plans, deterministic browser execution, and receipt metadata.
 - `hivemind-local-runner`: deterministic Rust development runner with installable artifact cache and sensitive-cache markers for protected packages.
@@ -43,7 +43,7 @@ The repository is a single Cargo workspace with separate crates for the major R&
 - `hivemind-provider-compat`: provider-shaped Anthropic Messages, Gemini Generate Content, Gemini Live session, and Hugging Face-style inference request/response adapters backed by SwarmAI execution and realtime contracts.
 - `hivemind-marketplace`: local-dev and Ed25519 signed package listings, review-4 `MarketplaceListingV2` category separation, runner offers, hardware resource offers, service quotes, escrow records, settlement events, dispute/refund/reject resolutions, signed refund records, evidence-gated slashing records, marketplace shortlists/ranking, offer/hardware-offer/quote/payment/escrow/refund verification, local-dev and Ed25519 payment authorizations, verified settlement results, and local payment/escrow/settlement/refund/resolution audit stores.
 - `hivemind-miner`: AI miner daemon profile, heartbeat, benchmark evidence, onboarding plan, dashboard summary, and local audit indexing contracts built around hardware-resource offers without treating Swarm/Bee as compute.
-- `hivemind-access`: license policy, canonical access-policy projection, access request, asset-scoped `AccessGrantV2` contracts, local-dev and Ed25519 signed package grants, grant/revocation audit indexing, grant revocation, verification, and access evaluation.
+- `hivemind-access`: license policy, canonical v1/v2 access-policy projection, review-5 `AssetAccessRuleV2` and `AccessGrantV3` contracts, paid-access quote/evaluation objects, access request, asset-scoped `AccessGrantV2` contracts, local-dev and Ed25519 signed package grants, grant/revocation audit indexing, grant revocation, verification, and access evaluation.
 - `hivemind-batch`: BatchJobV1 contracts, checkpoint and partial-result policies, privacy/integrity tiers, local-dev and Ed25519 signatures, verification, execution planning, and local job audit indexing for large offline work.
 - `hivemind-fine-tune`: FineTuneJobV1 contracts, training/validation dataset refs, output policies, privacy/cost/validation metadata, local-dev and Ed25519 signatures, verification, lease-oriented execution planning, and local job audit indexing.
 - `hivemind-media`: MediaJobV1 contracts for image generation/editing, speech-to-text, and text-to-speech, with privacy/integrity tiers, local-dev and Ed25519 signatures, verification, runner-side execution planning, and local job audit indexing.
@@ -423,17 +423,27 @@ cargo run -p hivemind-server -- schema standard-error-definition
 cargo run -p hivemind-server -- schema standard-error-catalog
 cargo run -p hivemind-server -- schema access-grant
 cargo run -p hivemind-server -- schema access-grant-v2
+cargo run -p hivemind-server -- schema access-grant-v3
 cargo run -p hivemind-server -- schema access-scope
 cargo run -p hivemind-server -- schema access-subject
 cargo run -p hivemind-server -- schema access-subject-type
 cargo run -p hivemind-server -- schema access-policy
 cargo run -p hivemind-server -- schema access-policy-verification
+cargo run -p hivemind-server -- schema license-policy-v2
+cargo run -p hivemind-server -- schema access-policy-v2
+cargo run -p hivemind-server -- schema access-policy-v2-verification
+cargo run -p hivemind-server -- schema asset-access-rule
+cargo run -p hivemind-server -- schema asset-access-rule-v2
+cargo run -p hivemind-server -- schema paid-access-quote
+cargo run -p hivemind-server -- schema access-evaluation-result
+cargo run -p hivemind-server -- schema job-access-attachment
 cargo run -p hivemind-server -- schema package-init-options
 cargo run -p hivemind-server -- schema package-init-result
 cargo run -p hivemind-server -- schema package-validation-audit-record
 cargo run -p hivemind-server -- schema package-validation-audit-store-summary
 cargo run -p hivemind-server -- schema access-grant-verification
 cargo run -p hivemind-server -- schema access-grant-v2-verification
+cargo run -p hivemind-server -- schema access-grant-v3-verification
 cargo run -p hivemind-server -- schema access-grant-store-summary
 cargo run -p hivemind-server -- schema access-grant-lookup
 cargo run -p hivemind-server -- schema access-grant-revocation
@@ -476,6 +486,12 @@ cargo run -p hivemind-server -- schema browser-swarm-storage-provider-v4
 cargo run -p hivemind-server -- schema browser-swarm-capability-report
 cargo run -p hivemind-server -- schema browser-swarm-provider-conformance
 cargo run -p hivemind-server -- schema browser-swarm-provider-catalog-v4
+cargo run -p hivemind-server -- schema browser-storage-capability-probe
+cargo run -p hivemind-server -- schema browser-storage-purchase-quote
+cargo run -p hivemind-server -- schema browser-storage-purchase-authorization
+cargo run -p hivemind-server -- schema browser-storage-session-v2
+cargo run -p hivemind-server -- schema storage-event-receipt-v2
+cargo run -p hivemind-server -- schema browser-storage-state-report
 cargo run -p hivemind-server -- schema storage-cost
 cargo run -p hivemind-server -- schema browser-storage-consent
 cargo run -p hivemind-server -- schema browser-storage-session
@@ -854,8 +870,14 @@ The server exposes:
 - `POST /v1/access/verify-grant`
 - `POST /v1/access/sign-grant-v2`
 - `POST /v1/access/verify-grant-v2`
+- `POST /v1/access/sign-grant-v3`
+- `POST /v1/access/verify-grant-v3`
 - `POST /v1/access/policy/project`
 - `POST /v1/access/policy/verify`
+- `POST /v1/access/policy/project-v2`
+- `POST /v1/access/policy/verify-v2`
+- `POST /v1/access/request-paid-access`
+- `POST /v1/access/attach-grant-to-job`
 - `GET /v1/access/grants`
 - `GET /v1/access/grants/{grantId}`
 - `POST /v1/access/revoke-grant`
@@ -1277,7 +1299,7 @@ The same package certification path is exposed through `/v1/compatibility/certif
 
 `RunnerCapabilityV2` is exposed as a production-facing projection over `RunnerCapabilityV1`. `/v1/hivemind/runners/v2` preserves supported APIs, modalities, package kinds, engines, hardware, memory, streaming modes, privacy tiers, verification tiers, price tables, and cache claims while adding identity, public-key placeholder, tool-execution policy, latency hints, uptime, validator-score, terms, expiration, and signature fields for independent runner, router, marketplace, and miner teams.
 
-`AccessPolicyV1` is exposed as a canonical policy object derived from `LicensePolicyV1`. `/v1/access/policy/project` turns existing package license rules into package/service refs, license type, rights, payment requirements, privacy requirements, verification requirements, grant scope, revocation refs, expiration metadata, and optional local-dev signatures; `/v1/access/policy/verify` checks canonical policy ids and development signatures. `AccessGrantV2` adds asset-scoped permissions for generic AI workflows: grants can authorize `read_asset`, `execute_package`, `run_service`, `publish_to_namespace`, `update_feed`, `validate_package`, `view_receipt`, `view_trace`, `use_vector_store`, `use_dataset`, `use_tool`, or `resell_or_delegate` against typed subjects such as assets, datasets, vector stores, tools, feeds, namespaces, receipts, traces, packages, and services. `/v1/access/sign-grant-v2` and `/v1/access/verify-grant-v2`, with matching `swarm-ai` and `hivemind` aliases, check canonical ids, compatible scope/subject pairs, expiry, references, and deterministic local-dev signatures.
+`AccessPolicyV1` and `AccessPolicyV2` are exposed as canonical policy objects derived from `LicensePolicyV1`, with `LicensePolicyV2` available for manifest-derived asset rules. `/v1/access/policy/project` and `/v1/access/policy/project-v2` turn existing package license rules into package/service refs, license type, rights, payment requirements, privacy requirements, verification requirements, grant scope, revocation refs, expiration metadata, and optional local-dev signatures; `/v1/access/policy/verify` and `/v1/access/policy/verify-v2` check canonical policy ids and development signatures. `AssetAccessRuleV2` is now the review-5 target rule object, projected from existing asset rules with allowed grant scopes, policy/license/payment/revocation refs, encryption metadata, and explicit privacy and verification requirements. `PaidAccessQuoteV1` plus `AccessEvaluationResultV1` provide auditable quote/evaluation records for paid or denied access without pretending the local implementation is already a live payment rail. `/v1/access/request-paid-access` accepts a valid `MarketplaceListingV2`, derives or reads its access policy, and returns a canonical `PaidAccessQuoteV1` bound to the listing. `AccessGrantV2` adds asset-scoped permissions for generic AI workflows, and `AccessGrantV3` extends that grant with asset-rule snapshots, payment evidence refs, revocation hints, privacy tier, and settlement refs for payment-bound package, asset, dataset, tool, and service access. `/v1/access/sign-grant-v2`, `/v1/access/verify-grant-v2`, `/v1/access/sign-grant-v3`, and `/v1/access/verify-grant-v3`, with matching `swarm-ai` and `hivemind` aliases, check canonical ids, compatible scope/subject pairs, expiry, references, asset-rule consistency, and deterministic local-dev signatures. `/v1/access/attach-grant-to-job` returns `JobAccessAttachmentV1`, an auditable projection that verifies a grant is job-relevant, attaches its ref to `JobOrderV1`, carries payment and settlement refs, and re-canonicalizes the updated job order before routing or execution.
 
 `swarm-ai policy trust local-only` and `swarm-ai policy trust open-marketplace` generate canonical `TrustPolicyV1` presets for route planning, native execution, dashboard-style local-only runs, and compatibility-endpoint metadata; `swarm-ai policy trust sign` adds a local-dev signature, `swarm-ai policy trust verify` checks a policy file's schema, canonical id, routing constraints, and signature status before use, and `swarm-ai policy trust list/get` expose the local trust-policy audit store. `/v1/policy/trust/local-only`, `/v1/policy/trust/open-marketplace`, `/v1/policy/trust/sign`, `/v1/policy/trust/verify`, `/v1/policy/trust`, and `/v1/policy/trust/{policyId}` expose the same trust-policy loop to API clients; generated or signed valid policies are persisted under `.swarm-ai-cache/trust` by default.
 
@@ -1320,7 +1342,7 @@ cargo run -p hivemind-server -- run-ref bzz://bee-reference --provider bee --bee
 
 The Bee provider uses `/bytes` for raw bytes and `/bzz` with an `application/x-tar` body plus `swarm-collection: true` for directory uploads, retries transient 408/429/502/503/504 responses twice with short backoff, and records header/total transfer timing plus `retryCount` in the same `metrics` shape as the local providers.
 
-Browser-native storage is modeled as auditable interface objects instead of a hard dependency on one JavaScript wallet or gateway implementation. `StorageProviderDescriptorV3` remains available for current local dev, Bee HTTP, bee-js gateway, Weeb-3 npm, and hosted upload relay flows. The review-4 `BrowserSwarmStorageProviderV4` catalog adds provider kind names, method sets, capability reports, fallback provider ids, and conformance reports for Weeb-3 browser, bee-js browser, verified gateway fallback, local development, and hosted relay paths. `BrowserStorageSessionV1` now carries provider, origin, quota, purchased/used size, capability, consent, status, and security-warning metadata; `StorageEventReceiptV1` records upload, retrieval, feed, or storage-purchase outcomes; and `StorageSponsorshipV1` lets an app, marketplace, DAO, or enterprise set signed budget, provider, origin, asset-class, namespace, expiry, and settlement-policy limits for user browser uploads. `BrowserStorageSecurityAssessmentV1` makes the review-4 browser risk controls explicit: provider conformance, origin isolation, sandboxed Swarm-loaded content, service-worker scope and update policy, IndexedDB origin scoping and visibility, clear-state controls, key separation, consent, private-upload encryption, and penetration-test evidence. `/v1/storage/providers/v4`, `/v1/browser-storage/providers/v4`, `/v1/browser-storage/security/assess`, `/v1/browser-storage/security/verify`, and the `swarm-ai`/`hivemind` aliases expose the v4 catalog and security assessment surface while keeping Swarm/Bee as storage, publication, access, and audit infrastructure rather than a GPU compute layer.
+Browser-native storage is modeled as auditable interface objects instead of a hard dependency on one JavaScript wallet or gateway implementation. `StorageProviderDescriptorV3` remains available for current local dev, Bee HTTP, bee-js gateway, Weeb-3 npm, and hosted upload relay flows. The review-4 `BrowserSwarmStorageProviderV4` catalog adds provider kind names, method sets, capability reports, fallback provider ids, and conformance reports for Weeb-3 browser, bee-js browser, verified gateway fallback, local development, and hosted relay paths. The review-5 browser storage contracts add `BrowserStorageCapabilityProbeV1`, `BrowserStoragePurchaseQuoteV1`, `BrowserStoragePurchaseAuthorizationV1`, `BrowserStorageSessionV2`, `StorageEventReceiptV2`, and `BrowserStorageStateReportV1` so separate browser, wallet, storage, and product teams can agree on explicit capability, payment, session, receipt, and sensitive-state boundaries before a real browser runtime spends funds or uploads user data. `BrowserStorageSecurityAssessmentV1` makes the browser risk controls explicit: provider conformance, origin isolation, sandboxed Swarm-loaded content, service-worker scope and update policy, IndexedDB origin scoping and visibility, clear-state controls, key separation, consent, private-upload encryption, and penetration-test evidence. `/v1/storage/providers/v4`, `/v1/browser-storage/providers/v4`, `/v1/browser-storage/security/assess`, `/v1/browser-storage/security/verify`, the schema CLI, and the `swarm-ai`/`hivemind` aliases expose the provider catalog, security assessment surface, and interface object schemas while keeping Swarm/Bee as storage, publication, access, and audit infrastructure rather than a GPU compute layer.
 
 Governance records can now mark implementation surfaces with explicit readiness labels: `mock`, `local`, `gateway`, `testnet`, or `production`. `ComponentReadinessV1` captures the component name, type, owner, implementation ref, schema refs, API surfaces, supported environments, compatibility certification refs, evidence refs, blockers, limitations, timestamp, and signature. Production readiness verification requires compatibility certification evidence, operational or test evidence, and no blockers; lower readiness levels can still be recorded with warnings so registry and operator views can distinguish local simulations, gateway integrations, testnet services, and production-approved components.
 

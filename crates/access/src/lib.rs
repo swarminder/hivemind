@@ -1,11 +1,23 @@
 use chrono::{DateTime, Utc};
 pub use hivemind_core::{
-    AccessControlMode, AccessControlV1, AccessDecision, AccessEvaluationV1,
-    AccessGrantRevocationV1, AccessGrantV1, AccessGrantV2, AccessMethod,
-    AccessPaymentRequirementV1, AccessPolicyV1, AccessPolicyV1Context, AccessPolicyVerificationV1,
-    AccessPrivacyRequirementV1, AccessProofV1, AccessRequestV1, AccessRevocationListV1,
-    AccessRightV1, AccessScopeV1, AccessSubjectTypeV1, AccessSubjectV1,
-    AccessVerificationRequirementV1, LicensePolicyV1,
+    ACCESS_EVALUATION_RESULT_SCHEMA_VERSION, ACCESS_GRANT_V3_SCHEMA_VERSION,
+    ACCESS_POLICY_V2_SCHEMA_VERSION, ACCESS_POLICY_V2_VERIFICATION_SCHEMA_VERSION,
+    ASSET_ACCESS_RULE_SCHEMA_VERSION, ASSET_ACCESS_RULE_V2_SCHEMA_VERSION, AccessControlMode,
+    AccessControlV1, AccessDecision, AccessEvaluationResultV1, AccessEvaluationV1,
+    AccessGrantRevocationV1, AccessGrantV1, AccessGrantV2, AccessGrantV3, AccessMethod,
+    AccessPaymentRequirementV1, AccessPolicyV1, AccessPolicyV1Context, AccessPolicyV2,
+    AccessPolicyV2VerificationV1, AccessPolicyVerificationV1, AccessPrivacyRequirementV1,
+    AccessProofV1, AccessRequestV1, AccessRevocationListV1, AccessRightV1, AccessScopeV1,
+    AccessSubjectTypeV1, AccessSubjectV1, AccessVerificationRequirementV1, AssetAccessRuleV1,
+    AssetAccessRuleV2, LICENSE_POLICY_V2_SCHEMA_VERSION, LicensePolicyV1, LicensePolicyV2,
+    PAID_ACCESS_QUOTE_SCHEMA_VERSION, PaidAccessQuoteV1, access_evaluation_result,
+    access_grant_v3_from_v2, access_policy_v2_from_license_policy,
+    access_policy_v2_from_license_policy_v2, access_policy_v2_from_license_policy_with_context,
+    asset_access_rule_v2_from_v1, asset_access_rules_v2_from_access_policy,
+    canonical_access_policy_v2_id, canonical_asset_access_rule_v2_id,
+    expected_access_policy_v2_signature, license_policy_v2_from_license_policy,
+    license_policy_v2_from_manifest, paid_access_quote, paid_access_quote_with_listing_ref,
+    sign_access_policy_v2, verify_access_policy_v2,
 };
 use hivemind_core::{
     PackageManifestV1, ValidationIssue, canonicalize_json, hash_canonical_json,
@@ -21,6 +33,7 @@ use std::path::{Path, PathBuf};
 
 const DEV_GRANT_SIGNATURE_PREFIX: &str = "dev-signature-v1";
 const DEV_GRANT_V2_SIGNATURE_PREFIX: &str = "dev-access-grant-v2-signature-v1";
+const DEV_GRANT_V3_SIGNATURE_PREFIX: &str = "dev-access-grant-v3-signature-v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct AccessGrantVerificationV1 {
@@ -37,6 +50,23 @@ pub struct AccessGrantVerificationV1 {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct AccessGrantV2VerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "grantId")]
+    pub grant_id: String,
+    #[serde(rename = "expectedGrantId")]
+    pub expected_grant_id: String,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AccessGrantV3VerificationV1 {
     #[serde(rename = "schemaVersion")]
     pub schema_version: String,
     #[serde(rename = "grantId")]
@@ -483,6 +513,149 @@ pub fn verify_access_grant_v2(grant: &AccessGrantV2) -> AccessGrantV2Verificatio
 
     AccessGrantV2VerificationV1 {
         schema_version: "hivemind.access-grant-verification.v2".to_string(),
+        grant_id: grant.grant_id.clone(),
+        expected_grant_id,
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339(),
+    }
+}
+
+pub fn dev_access_grant_v3(
+    issuer: impl Into<String>,
+    grantee: impl Into<String>,
+    scopes: Vec<AccessScopeV1>,
+    subjects: Vec<AccessSubjectV1>,
+    asset_rules: Vec<AssetAccessRuleV2>,
+    allowed_uses: Vec<String>,
+    privacy_tier: Option<hivemind_core::PrivacyTier>,
+    expires_at: Option<String>,
+) -> serde_json::Result<AccessGrantV3> {
+    let grant_v2 = AccessGrantV2 {
+        schema_version: "hivemind.access-grant.v2".to_string(),
+        grant_id: "access-grant-pending".to_string(),
+        issuer: issuer.into(),
+        grantee: grantee.into(),
+        scopes,
+        subjects,
+        allowed_uses,
+        constraints: json!({}),
+        issued_at: Utc::now().to_rfc3339(),
+        expires_at,
+        runner_id: None,
+        revocation_list_ref: None,
+        payment_ref: None,
+        settlement_ref: None,
+        evidence_refs: Vec::new(),
+        signatures: Vec::new(),
+    };
+    let mut grant = access_grant_v3_from_v2(&grant_v2, asset_rules, privacy_tier, Vec::new());
+    sign_access_grant_v3(&mut grant)?;
+    Ok(grant)
+}
+
+pub fn canonical_access_grant_v3_id(grant: &AccessGrantV3) -> serde_json::Result<String> {
+    Ok(format!(
+        "access-grant-v3-{}",
+        &hash_canonical_json(&canonicalize_json(&access_grant_v3_signing_value(grant)?))[..24]
+    ))
+}
+
+pub fn expected_access_grant_v3_signature(grant: &AccessGrantV3) -> serde_json::Result<String> {
+    let value = json!({
+        "label": "access-grant-v3",
+        "issuer": grant.issuer,
+        "payload": access_grant_v3_signing_value(grant)?,
+    });
+    Ok(format!(
+        "{DEV_GRANT_V3_SIGNATURE_PREFIX}:{}",
+        &hash_canonical_json(&canonicalize_json(&value))[..32]
+    ))
+}
+
+pub fn sign_access_grant_v3(grant: &mut AccessGrantV3) -> serde_json::Result<String> {
+    grant.grant_id = canonical_access_grant_v3_id(grant)?;
+    let signature = expected_access_grant_v3_signature(grant)?;
+    grant
+        .signatures
+        .retain(|value| !value.starts_with(DEV_GRANT_V3_SIGNATURE_PREFIX));
+    grant.signatures.push(signature.clone());
+    Ok(signature)
+}
+
+pub fn verify_access_grant_v3(grant: &AccessGrantV3) -> AccessGrantV3VerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_grant_id = canonical_access_grant_v3_id(grant)
+        .unwrap_or_else(|_| "access-grant-v3-invalid".to_string());
+    let expected_signature = expected_access_grant_v3_signature(grant)
+        .unwrap_or_else(|_| format!("{DEV_GRANT_V3_SIGNATURE_PREFIX}:invalid"));
+
+    if grant.schema_version != ACCESS_GRANT_V3_SCHEMA_VERSION {
+        issues.push(issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {ACCESS_GRANT_V3_SCHEMA_VERSION}"),
+        ));
+    }
+    if grant.object_kind != "access_grant" {
+        issues.push(issue(
+            "$.objectKind",
+            "Expected objectKind to be access_grant",
+        ));
+    }
+    if grant.grant_id.trim().is_empty() {
+        issues.push(issue("$.grantId", "Access grant id is required"));
+    } else if grant.grant_id != expected_grant_id {
+        issues.push(issue(
+            "$.grantId",
+            "Access grant v3 id does not match canonical grant content",
+        ));
+    }
+    if grant.issuer.trim().is_empty() {
+        issues.push(issue("$.issuer", "Access grant issuer is required"));
+    }
+    if grant.grantee.trim().is_empty() {
+        issues.push(issue("$.grantee", "Access grant grantee is required"));
+    }
+    validate_access_scopes(&grant.scopes, &grant.subjects, &mut issues);
+    validate_access_subjects(&grant.subjects, &mut issues, &mut warnings);
+    validate_access_grant_v3_timestamps(grant, &mut issues);
+    validate_access_grant_v3_refs(grant, &mut warnings);
+    validate_asset_rules_v3(grant, &mut issues, &mut warnings);
+    if grant
+        .asset_rules
+        .iter()
+        .any(|rule| rule.payment_requirement.required)
+        && grant.payment_ref.is_none()
+        && grant.payment_evidence_refs.is_empty()
+    {
+        warnings.push(issue(
+            "$.paymentEvidenceRefs",
+            "Paid asset grant should include paymentRef or paymentEvidenceRefs",
+        ));
+    }
+    if grant
+        .asset_rules
+        .iter()
+        .any(|rule| rule.privacy_requirement.runner_grant_required)
+        && grant.privacy_tier.is_none()
+    {
+        warnings.push(issue(
+            "$.privacyTier",
+            "Protected asset grant should declare the privacy tier it authorizes",
+        ));
+    }
+    verify_access_grant_v3_signatures(
+        &grant.signatures,
+        &expected_signature,
+        &mut issues,
+        &mut warnings,
+    );
+
+    AccessGrantV3VerificationV1 {
+        schema_version: "hivemind.access-grant-verification.v3".to_string(),
         grant_id: grant.grant_id.clone(),
         expected_grant_id,
         valid: issues.is_empty(),
@@ -1177,6 +1350,15 @@ fn access_grant_v2_signing_value(grant: &AccessGrantV2) -> serde_json::Result<Va
     Ok(value)
 }
 
+fn access_grant_v3_signing_value(grant: &AccessGrantV3) -> serde_json::Result<Value> {
+    let mut value = serde_json::to_value(grant)?;
+    if let Value::Object(object) = &mut value {
+        object.remove("grantId");
+        object.remove("signatures");
+    }
+    Ok(value)
+}
+
 fn validate_access_scopes(
     scopes: &[AccessScopeV1],
     subjects: &[AccessSubjectV1],
@@ -1327,6 +1509,128 @@ fn validate_access_grant_refs(grant: &AccessGrantV2, warnings: &mut Vec<Validati
     }
 }
 
+fn validate_access_grant_v3_timestamps(grant: &AccessGrantV3, issues: &mut Vec<ValidationIssue>) {
+    if DateTime::parse_from_rfc3339(&grant.issued_at).is_err() {
+        issues.push(issue("$.issuedAt", "Access grant issuedAt must be RFC3339"));
+    }
+    if let Some(expires_at) = &grant.expires_at {
+        match DateTime::parse_from_rfc3339(expires_at) {
+            Ok(expires_at) if expires_at.with_timezone(&Utc) <= Utc::now() => {
+                issues.push(issue("$.expiresAt", "Access grant is expired"));
+            }
+            Ok(_) => {}
+            Err(_) => issues.push(issue(
+                "$.expiresAt",
+                "Access grant expiresAt must be RFC3339",
+            )),
+        }
+    }
+}
+
+fn validate_access_grant_v3_refs(grant: &AccessGrantV3, warnings: &mut Vec<ValidationIssue>) {
+    for (index, reference) in grant.evidence_refs.iter().enumerate() {
+        if !looks_like_access_reference(reference) {
+            warnings.push(issue(
+                format!("$.evidenceRefs[{index}]"),
+                "Evidence ref is not a recognized Swarm, local, web, IPFS, or hash reference",
+            ));
+        }
+    }
+    for (index, reference) in grant.payment_evidence_refs.iter().enumerate() {
+        if !looks_like_access_reference(reference) {
+            warnings.push(issue(
+                format!("$.paymentEvidenceRefs[{index}]"),
+                "Payment evidence ref is not a recognized Swarm, local, web, IPFS, or hash reference",
+            ));
+        }
+    }
+    for (index, reference) in grant.revocation_hint_refs.iter().enumerate() {
+        if !looks_like_access_reference(reference) {
+            warnings.push(issue(
+                format!("$.revocationHintRefs[{index}]"),
+                "Revocation hint ref is not a recognized Swarm, local, web, IPFS, or hash reference",
+            ));
+        }
+    }
+    for (path, reference) in [
+        ("$.revocationListRef", grant.revocation_list_ref.as_deref()),
+        ("$.paymentRef", grant.payment_ref.as_deref()),
+        ("$.settlementRef", grant.settlement_ref.as_deref()),
+    ] {
+        if let Some(reference) = reference
+            && !looks_like_access_reference(reference)
+        {
+            warnings.push(issue(
+                path,
+                "Reference is not a recognized Swarm, local, web, IPFS, or hash reference",
+            ));
+        }
+    }
+}
+
+fn validate_asset_rules_v3(
+    grant: &AccessGrantV3,
+    issues: &mut Vec<ValidationIssue>,
+    warnings: &mut Vec<ValidationIssue>,
+) {
+    if grant.asset_rules.is_empty() {
+        warnings.push(issue(
+            "$.assetRules",
+            "AccessGrantV3 should carry the asset-level rules it authorizes when possible",
+        ));
+        return;
+    }
+    for (index, rule) in grant.asset_rules.iter().enumerate() {
+        let path = format!("$.assetRules[{index}]");
+        if rule.schema_version != ASSET_ACCESS_RULE_V2_SCHEMA_VERSION {
+            issues.push(issue(
+                format!("{path}.schemaVersion"),
+                format!("Expected schemaVersion to be {ASSET_ACCESS_RULE_V2_SCHEMA_VERSION}"),
+            ));
+        }
+        if rule.object_kind != "asset_access_rule" {
+            issues.push(issue(
+                format!("{path}.objectKind"),
+                "Expected objectKind to be asset_access_rule",
+            ));
+        }
+        if rule.rule_id != canonical_asset_access_rule_v2_id(rule) {
+            issues.push(issue(
+                format!("{path}.ruleId"),
+                "Asset access rule v2 id does not match canonical rule content",
+            ));
+        }
+        if rule.subject.subject_id.trim().is_empty() {
+            issues.push(issue(
+                format!("{path}.subject.subjectId"),
+                "Asset access rule subject id is required",
+            ));
+        }
+        if rule.allowed_scopes.is_empty() {
+            warnings.push(issue(
+                format!("{path}.allowedScopes"),
+                "Asset access rule v2 should declare compatible grant scopes",
+            ));
+        }
+        if rule.encrypted && !rule.grant_required {
+            issues.push(issue(
+                format!("{path}.grantRequired"),
+                "Encrypted asset rules must require an access grant",
+            ));
+        }
+        if !grant
+            .subjects
+            .iter()
+            .any(|subject| subject.subject_id == rule.subject.subject_id)
+        {
+            warnings.push(issue(
+                format!("{path}.subject"),
+                "Grant subjects do not include this asset rule subject id",
+            ));
+        }
+    }
+}
+
 fn verify_access_grant_v2_signatures(
     signatures: &[String],
     expected_signature: &str,
@@ -1371,6 +1675,45 @@ fn verify_access_grant_v2_signatures(
         warnings.push(issue(
             "$.signatures",
             "Access grant does not include a locally verifiable development signature",
+        ));
+    }
+}
+
+fn verify_access_grant_v3_signatures(
+    signatures: &[String],
+    expected_signature: &str,
+    issues: &mut Vec<ValidationIssue>,
+    warnings: &mut Vec<ValidationIssue>,
+) {
+    if signatures.is_empty() {
+        warnings.push(issue(
+            "$.signatures",
+            "Access grant v3 is unsigned development data",
+        ));
+        return;
+    }
+    if signatures
+        .iter()
+        .any(|signature| signature == expected_signature)
+    {
+        warnings.push(issue(
+            "$.signatures",
+            "Access grant v3 uses deterministic local-dev signing, not production identity signing",
+        ));
+        return;
+    }
+    if signatures
+        .iter()
+        .any(|signature| signature.starts_with(DEV_GRANT_V3_SIGNATURE_PREFIX))
+    {
+        issues.push(issue(
+            "$.signatures",
+            "Access grant v3 signature does not match canonical dev signature",
+        ));
+    } else {
+        warnings.push(issue(
+            "$.signatures",
+            "Access grant v3 has signatures, but none are recognized by local verifier",
         ));
     }
 }
@@ -1562,7 +1905,8 @@ fn safe_id_component(value: &str) -> String {
 mod tests {
     use super::*;
     use hivemind_core::{
-        ArtifactGroup, ArtifactMinimum, LicenseInfo, LicenseType, PackageKind, Publisher,
+        ArtifactGroup, ArtifactMinimum, LicenseInfo, LicenseType, PackageKind, PrivacyTier,
+        Publisher,
     };
     use serde_json::json;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1769,6 +2113,164 @@ mod tests {
                 .iter()
                 .any(|issue| issue.path == "$.expiresAt")
         );
+    }
+
+    #[test]
+    fn access_grant_v3_projects_asset_rules_payment_evidence_and_detects_tampering() {
+        let subject = AccessSubjectV1 {
+            subject_id: "dataset/customer-support-v1".to_string(),
+            subject_type: AccessSubjectTypeV1::Dataset,
+            refs: vec!["bzz://dataset-customer-support".to_string()],
+            asset_class: Some("dataset".to_string()),
+            content_hash: Some(format!("sha256:{}", "c".repeat(64))),
+            namespace: None,
+        };
+        let mut rule = AssetAccessRuleV2 {
+            schema_version: ASSET_ACCESS_RULE_V2_SCHEMA_VERSION.to_string(),
+            object_kind: "asset_access_rule".to_string(),
+            rule_id: String::new(),
+            subject: subject.clone(),
+            rights: vec![AccessRightV1::ViewMetadata, AccessRightV1::DecryptArtifacts],
+            allowed_scopes: vec![AccessScopeV1::ReadAsset, AccessScopeV1::UseDataset],
+            access_method: AccessMethod::EncryptedReference,
+            grant_required: true,
+            public_metadata: true,
+            encrypted: true,
+            policy_ref: Some("local://access-policy-v2/policy-1".to_string()),
+            license_ref: Some("bzz://license".to_string()),
+            decryption_ref: Some(
+                "local://access/decryption/dataset-customer-support-v1".to_string(),
+            ),
+            revocation_list_ref: Some("bzz://revocations".to_string()),
+            settlement_ref: Some("bzz://settlement".to_string()),
+            payment_requirement: AccessPaymentRequirementV1 {
+                required: true,
+                asset: Some("xDAI".to_string()),
+                amount: Some(3.0),
+                settlement_ref: Some("bzz://settlement".to_string()),
+                subscription_ref: None,
+            },
+            privacy_requirement: AccessPrivacyRequirementV1 {
+                allowed_privacy_tiers: vec![PrivacyTier::LocalOnly, PrivacyTier::TeeConfidential],
+                runner_grant_required: true,
+                secret_refs_required: true,
+            },
+            verification_requirement: AccessVerificationRequirementV1 {
+                allowed_verification_tiers: vec![hivemind_core::IntegrityTier::ReceiptOnly],
+                require_receipt: true,
+                require_validation: false,
+            },
+            evidence_refs: vec!["bzz://access-evidence".to_string()],
+        };
+        rule.rule_id = canonical_asset_access_rule_v2_id(&rule);
+        let grant_v2 = dev_access_grant_v2(
+            "did:hivemind:publisher",
+            "did:hivemind:research-team",
+            vec![AccessScopeV1::ReadAsset, AccessScopeV1::UseDataset],
+            vec![subject],
+            vec!["research".to_string()],
+            None,
+        )
+        .unwrap();
+        let mut grant = access_grant_v3_from_v2(
+            &grant_v2,
+            vec![rule],
+            Some(PrivacyTier::TeeConfidential),
+            vec!["bzz://payment-authorization".to_string()],
+        );
+        grant.payment_ref = Some("bzz://payment-authorization".to_string());
+        sign_access_grant_v3(&mut grant).unwrap();
+
+        let verification = verify_access_grant_v3(&grant);
+        assert_eq!(grant.schema_version, ACCESS_GRANT_V3_SCHEMA_VERSION);
+        assert!(grant.grant_id.starts_with("access-grant-v3-"));
+        assert_eq!(verification.expected_grant_id, grant.grant_id);
+        assert_eq!(verification.expected_signature, grant.signatures[0]);
+        assert!(verification.valid, "{verification:#?}");
+        assert!(
+            verification
+                .warnings
+                .iter()
+                .any(|warning| warning.path == "$.signatures")
+        );
+
+        grant.asset_rules[0].encrypted = false;
+        let tampered = verify_access_grant_v3(&grant);
+        assert!(!tampered.valid);
+        assert!(
+            tampered
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.grantId" || issue.path.starts_with("$.signatures"))
+        );
+    }
+
+    #[test]
+    fn access_grant_v3_warns_when_paid_rule_lacks_payment_evidence() {
+        let subject = AccessSubjectV1 {
+            subject_id: "asset/private-model".to_string(),
+            subject_type: AccessSubjectTypeV1::Asset,
+            refs: vec!["bzz://private-model".to_string()],
+            asset_class: Some("model".to_string()),
+            content_hash: Some(format!("sha256:{}", "d".repeat(64))),
+            namespace: None,
+        };
+        let mut grant = dev_access_grant_v3(
+            "did:hivemind:publisher",
+            "did:hivemind:buyer",
+            vec![AccessScopeV1::ReadAsset],
+            vec![subject.clone()],
+            vec![AssetAccessRuleV2 {
+                schema_version: ASSET_ACCESS_RULE_V2_SCHEMA_VERSION.to_string(),
+                object_kind: "asset_access_rule".to_string(),
+                rule_id: "pending".to_string(),
+                subject,
+                rights: vec![AccessRightV1::DecryptArtifacts],
+                allowed_scopes: vec![AccessScopeV1::ReadAsset],
+                access_method: AccessMethod::EncryptedReference,
+                grant_required: true,
+                public_metadata: true,
+                encrypted: true,
+                policy_ref: None,
+                license_ref: None,
+                decryption_ref: None,
+                revocation_list_ref: None,
+                settlement_ref: None,
+                payment_requirement: AccessPaymentRequirementV1 {
+                    required: true,
+                    asset: Some("xDAI".to_string()),
+                    amount: Some(1.0),
+                    settlement_ref: None,
+                    subscription_ref: None,
+                },
+                privacy_requirement: AccessPrivacyRequirementV1 {
+                    allowed_privacy_tiers: vec![PrivacyTier::LocalOnly],
+                    runner_grant_required: true,
+                    secret_refs_required: true,
+                },
+                verification_requirement: AccessVerificationRequirementV1 {
+                    allowed_verification_tiers: vec![hivemind_core::IntegrityTier::ReceiptOnly],
+                    require_receipt: true,
+                    require_validation: false,
+                },
+                evidence_refs: Vec::new(),
+            }],
+            vec!["commercial".to_string()],
+            Some(PrivacyTier::LocalOnly),
+            None,
+        )
+        .unwrap();
+        grant.asset_rules[0].rule_id = canonical_asset_access_rule_v2_id(&grant.asset_rules[0]);
+        sign_access_grant_v3(&mut grant).unwrap();
+
+        let verification = verify_access_grant_v3(&grant);
+        assert!(verification.valid, "{verification:#?}");
+        assert!(verification.warnings.iter().any(|warning| {
+            warning.path == "$.paymentEvidenceRefs"
+                && warning
+                    .message
+                    .contains("paymentRef or paymentEvidenceRefs")
+        }));
     }
 
     #[test]
