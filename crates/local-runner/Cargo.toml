@@ -14,6 +14,7 @@ hivemind-package = { path = "../package" }
 hivemind-policy = { path = "../policy" }
 hivemind-receipts = { path = "../receipts" }
 hivemind-storage = { path = "../storage" }
+reqwest.workspace = true
 schemars.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

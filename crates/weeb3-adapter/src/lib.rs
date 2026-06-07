@@ -1,12 +1,30 @@
 use hivemind_core::{ErrorCode, SwarmAiErrorV1};
 use hivemind_storage::{
-    DirectoryManifestV1, DownloadResponseV1, StorageCapabilities, StorageProvider, StorageStatusV1,
-    UploadResponseV1,
+    BrowserStorageCapabilityProbeV1, BrowserStorageEncryptionModeV1, BrowserStoragePermissionV1,
+    BrowserStoragePurchaseAuthorizationV1, BrowserStoragePurchaseQuoteV1, BrowserStorageSessionV2,
+    BrowserStorageStateEntryV1, BrowserStorageStateReportV1, BrowserSwarmProviderProfileV1,
+    BrowserSwarmStorageMethodV4, BrowserSwarmStorageProviderV4, DirectoryManifestV1,
+    DownloadResponseV1, StorageCapabilities, StorageCostV1, StorageEventActionV2,
+    StorageEventReceiptV2, StorageEventStatusV1, StorageFeedUpdateResultV1, StorageProvider,
+    StorageProviderKindV4, StorageStatusV1, UploadResponseV1, browser_storage_capability_probe,
+    browser_storage_purchase_authorization, browser_storage_purchase_quote,
+    browser_storage_session_v2, browser_storage_state_report,
+    default_browser_swarm_storage_providers_v4, sign_browser_storage_capability_probe,
+    sign_browser_storage_purchase_authorization, sign_browser_storage_purchase_quote,
+    sign_browser_storage_session_v2, sign_browser_storage_state_report,
+    sign_storage_event_receipt_v2, storage_event_receipt_v2,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::path::Path;
+
+pub const BROWSER_SWARM_STORAGE_PROVIDER_V6_SCHEMA_VERSION: &str =
+    "hivemind.browser-swarm-storage-provider.v6";
+pub const BROWSER_PUBLISH_ONE_RESULT_SCHEMA_VERSION: &str =
+    "hivemind.browser-publish-one-result.v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Weeb3AdapterDescriptorV1 {
@@ -205,6 +223,79 @@ pub struct BrowserSwarmFileResultV1 {
     pub retrieval: BrowserSwarmRetrievalV1,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum BrowserSwarmReadinessLabelV1 {
+    Mock,
+    BrowserTest,
+    Testnet,
+    Production,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BrowserSwarmStorageProviderV6 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "objectKind")]
+    pub object_kind: String,
+    #[serde(rename = "providerId")]
+    pub provider_id: String,
+    #[serde(rename = "providerName")]
+    pub provider_name: String,
+    #[serde(rename = "providerVersion")]
+    pub provider_version: String,
+    #[serde(rename = "providerKind")]
+    pub provider_kind: StorageProviderKindV4,
+    pub profile: BrowserSwarmProviderProfileV1,
+    pub readiness: BrowserSwarmReadinessLabelV1,
+    #[serde(rename = "executionLayer")]
+    pub execution_layer: String,
+    #[serde(rename = "publicationLayer")]
+    pub publication_layer: String,
+    #[serde(rename = "auditLayer")]
+    pub audit_layer: String,
+    #[serde(rename = "testScope")]
+    pub test_scope: String,
+    #[serde(rename = "supportedMethods")]
+    pub supported_methods: Vec<BrowserSwarmStorageMethodV4>,
+    #[serde(rename = "privacyTiers")]
+    pub privacy_tiers: Vec<String>,
+    #[serde(rename = "integrityTiers")]
+    pub integrity_tiers: Vec<String>,
+    #[serde(rename = "walletRequired")]
+    pub wallet_required: bool,
+    #[serde(rename = "explicitConsentRequired")]
+    pub explicit_consent_required: bool,
+    #[serde(rename = "liveWalletSpendAllowed")]
+    pub live_wallet_spend_allowed: bool,
+    #[serde(rename = "contractV4")]
+    pub contract_v4: BrowserSwarmStorageProviderV4,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BrowserPublishOneResultV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    pub provider: BrowserSwarmStorageProviderV6,
+    pub probe: BrowserStorageCapabilityProbeV1,
+    pub quote: BrowserStoragePurchaseQuoteV1,
+    pub authorization: BrowserStoragePurchaseAuthorizationV1,
+    pub session: BrowserStorageSessionV2,
+    pub upload: UploadResponseV1,
+    pub retrieval: BrowserSwarmRetrievalV1,
+    #[serde(rename = "contentHash")]
+    pub content_hash: String,
+    #[serde(rename = "retrievedSizeBytes")]
+    pub retrieved_size_bytes: usize,
+    #[serde(rename = "verifiedRoundTrip")]
+    pub verified_round_trip: bool,
+    pub receipts: Vec<StorageEventReceiptV2>,
+    #[serde(rename = "stateReport")]
+    pub state_report: BrowserStorageStateReportV1,
+    pub warnings: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct BrowserSwarmProvider<F> {
     config: BrowserSwarmConfigV1,
@@ -212,6 +303,24 @@ pub struct BrowserSwarmProvider<F> {
     cache: BTreeMap<String, DownloadResponseV1>,
     fallback: Option<F>,
     last_error: Option<SwarmAiErrorV1>,
+}
+
+pub struct BrowserPublishOnePilot<F> {
+    provider_contract: BrowserSwarmStorageProviderV6,
+    provider: BrowserSwarmProvider<F>,
+    browser_name: String,
+    browser_version: String,
+    origin: String,
+    network_id: Option<String>,
+    chain_id: Option<String>,
+    wallet_address: String,
+    probe: Option<BrowserStorageCapabilityProbeV1>,
+    quote: Option<BrowserStoragePurchaseQuoteV1>,
+    authorization: Option<BrowserStoragePurchaseAuthorizationV1>,
+    session: Option<BrowserStorageSessionV2>,
+    receipts: Vec<StorageEventReceiptV2>,
+    feed_updates: Vec<StorageFeedUpdateResultV1>,
+    sensitive_state_cleared: bool,
 }
 
 pub fn descriptor() -> Weeb3AdapterDescriptorV1 {
@@ -239,6 +348,69 @@ pub fn browser_swarm_provider_contract() -> BrowserSwarmProviderV1 {
             "upload(file, options)".to_string(),
             "resetStamp()".to_string(),
         ],
+    }
+}
+
+pub fn mock_browser_swarm_storage_provider_v6() -> BrowserSwarmStorageProviderV6 {
+    let contract_v4 = default_browser_swarm_storage_providers_v4()
+        .into_iter()
+        .find(|provider| provider.provider_id == "weeb3-browser")
+        .expect("default browser Swarm provider catalog should include weeb3-browser");
+    browser_swarm_storage_provider_v6_from_v4(
+        contract_v4,
+        BrowserSwarmReadinessLabelV1::BrowserTest,
+    )
+}
+
+pub fn browser_swarm_storage_provider_v6_from_v4(
+    contract_v4: BrowserSwarmStorageProviderV4,
+    readiness: BrowserSwarmReadinessLabelV1,
+) -> BrowserSwarmStorageProviderV6 {
+    let mut warnings = contract_v4.capability_report.security_warnings.clone();
+    warnings.extend(contract_v4.capability_report.limitations.clone());
+    warnings.push(
+        "Mock/browser-test readiness records the production object flow but must not spend live wallet funds"
+            .to_string(),
+    );
+
+    BrowserSwarmStorageProviderV6 {
+        schema_version: BROWSER_SWARM_STORAGE_PROVIDER_V6_SCHEMA_VERSION.to_string(),
+        object_kind: "browser_swarm_storage_provider".to_string(),
+        provider_id: contract_v4.provider_id.clone(),
+        provider_name: contract_v4.provider_name.clone(),
+        provider_version: "v6-pilot".to_string(),
+        provider_kind: contract_v4.provider_kind.clone(),
+        profile: contract_v4.profile.clone(),
+        readiness,
+        execution_layer: "browser-local-remote-or-miner".to_string(),
+        publication_layer: "swarm-bee-weeb3-application-data".to_string(),
+        audit_layer: "storage-event-receipt-v2".to_string(),
+        test_scope: "mock-first local provider; live wallet and Bee usage must be opt-in"
+            .to_string(),
+        supported_methods: contract_v4.capability_report.methods.clone(),
+        privacy_tiers: vec![
+            "public".to_string(),
+            "client-side-encrypted".to_string(),
+            "provider-managed".to_string(),
+        ],
+        integrity_tiers: vec![
+            "hash-verified".to_string(),
+            "receipt-backed".to_string(),
+            "replication-or-validation-future".to_string(),
+        ],
+        wallet_required: contract_v4.wallet_required,
+        explicit_consent_required: true,
+        live_wallet_spend_allowed: matches!(readiness, BrowserSwarmReadinessLabelV1::Production),
+        contract_v4,
+        warnings,
+    }
+}
+
+pub fn zero_dev_storage_cost() -> StorageCostV1 {
+    StorageCostV1 {
+        amount: 0.0,
+        currency: "DEV".to_string(),
+        asset: None,
     }
 }
 
@@ -535,6 +707,489 @@ impl<F: StorageProvider> BrowserSwarmProvider<F> {
     }
 }
 
+impl<F: StorageProvider> BrowserPublishOnePilot<F> {
+    pub fn mock_with_fallback(
+        config: BrowserSwarmConfigV1,
+        fallback: F,
+        origin: impl Into<String>,
+        wallet_address: impl Into<String>,
+    ) -> Self {
+        Self::with_provider(
+            BrowserSwarmProvider::with_fallback(config, fallback),
+            mock_browser_swarm_storage_provider_v6(),
+            origin,
+            wallet_address,
+        )
+    }
+
+    pub fn with_provider(
+        provider: BrowserSwarmProvider<F>,
+        provider_contract: BrowserSwarmStorageProviderV6,
+        origin: impl Into<String>,
+        wallet_address: impl Into<String>,
+    ) -> Self {
+        let network_id = Some(provider.config.network_id.clone());
+        BrowserPublishOnePilot {
+            provider_contract,
+            provider,
+            browser_name: "mock-browser".to_string(),
+            browser_version: "browser-test".to_string(),
+            origin: origin.into(),
+            network_id,
+            chain_id: Some("eip155:100".to_string()),
+            wallet_address: wallet_address.into(),
+            probe: None,
+            quote: None,
+            authorization: None,
+            session: None,
+            receipts: Vec::new(),
+            feed_updates: Vec::new(),
+            sensitive_state_cleared: false,
+        }
+    }
+
+    pub fn provider_contract(&self) -> &BrowserSwarmStorageProviderV6 {
+        &self.provider_contract
+    }
+
+    pub fn provider(&self) -> &BrowserSwarmProvider<F> {
+        &self.provider
+    }
+
+    pub fn provider_mut(&mut self) -> &mut BrowserSwarmProvider<F> {
+        &mut self.provider
+    }
+
+    pub fn receipts(&self) -> &[StorageEventReceiptV2] {
+        &self.receipts
+    }
+
+    pub fn probe_capabilities(
+        &mut self,
+        wallet_providers_detected: Vec<String>,
+        estimated_quota_bytes: Option<u64>,
+    ) -> Result<BrowserStorageCapabilityProbeV1, SwarmAiErrorV1> {
+        let mut probe = browser_storage_capability_probe(
+            &self.provider_contract.contract_v4,
+            &self.browser_name,
+            &self.browser_version,
+            &self.origin,
+            self.network_id.clone(),
+            wallet_providers_detected,
+            estimated_quota_bytes,
+        );
+        sign_browser_storage_capability_probe(&mut probe).map_err(signature_error)?;
+        self.probe = Some(probe.clone());
+        Ok(probe)
+    }
+
+    pub fn quote_purchase(
+        &mut self,
+        requested_bytes: u64,
+        duration_seconds: u64,
+        estimated_cost: StorageCostV1,
+    ) -> Result<BrowserStoragePurchaseQuoteV1, SwarmAiErrorV1> {
+        let probe = self.require_probe()?.clone();
+        let mut quote = browser_storage_purchase_quote(
+            &self.provider_contract.contract_v4,
+            &probe,
+            requested_bytes,
+            duration_seconds,
+            estimated_cost,
+            self.chain_id.clone(),
+        );
+        sign_browser_storage_purchase_quote(&mut quote).map_err(signature_error)?;
+        self.quote = Some(quote.clone());
+        Ok(quote)
+    }
+
+    pub fn authorize_purchase(
+        &mut self,
+        approved: bool,
+        prompt_text: impl AsRef<[u8]>,
+    ) -> Result<BrowserStoragePurchaseAuthorizationV1, SwarmAiErrorV1> {
+        let quote = self.require_quote()?.clone();
+        let mut authorization = browser_storage_purchase_authorization(
+            &quote,
+            self.wallet_address.clone(),
+            approved,
+            prompt_text,
+        );
+        sign_browser_storage_purchase_authorization(&mut authorization).map_err(signature_error)?;
+        self.authorization = Some(authorization.clone());
+        Ok(authorization)
+    }
+
+    pub fn start_session(
+        &mut self,
+        approved: bool,
+    ) -> Result<BrowserStorageSessionV2, SwarmAiErrorV1> {
+        require_explicit_consent("start_session", approved)?;
+        if let Some(session) = self.session.clone() {
+            return Ok(session);
+        }
+
+        let probe = self.require_probe()?.clone();
+        let authorization = self.authorization.clone();
+        let (quota_bytes, duration_seconds) = self
+            .quote
+            .as_ref()
+            .map(|quote| (quote.requested_bytes, quote.duration_seconds))
+            .unwrap_or((64 * 1024 * 1024, 60 * 60));
+        let mut session = browser_storage_session_v2(
+            &self.provider_contract.contract_v4,
+            &probe,
+            authorization.as_ref(),
+            quota_bytes,
+            duration_seconds,
+        );
+        sign_browser_storage_session_v2(&mut session).map_err(signature_error)?;
+        self.session = Some(session.clone());
+        self.record_receipt(
+            StorageEventActionV2::Start,
+            None,
+            None,
+            None,
+            0,
+            StorageEventStatusV1::Succeeded,
+        )?;
+        Ok(session)
+    }
+
+    pub fn buy_or_reuse_storage(
+        &mut self,
+        approved: bool,
+        reuse_existing: bool,
+    ) -> Result<StorageEventReceiptV2, SwarmAiErrorV1> {
+        require_explicit_consent("buy_or_reuse_storage", approved)?;
+        if !reuse_existing {
+            let authorization = self.require_authorization()?;
+            if !authorization.approved {
+                return Err(SwarmAiErrorV1::new(
+                    ErrorCode::AccessDenied,
+                    "storage purchase cannot proceed without approved wallet authorization",
+                ));
+            }
+        }
+        let session = self.start_session(true)?;
+        let action = if reuse_existing {
+            StorageEventActionV2::Reuse
+        } else {
+            StorageEventActionV2::Buy
+        };
+        self.record_receipt(
+            action,
+            None,
+            None,
+            None,
+            session.quota_bytes,
+            StorageEventStatusV1::Succeeded,
+        )
+    }
+
+    pub fn reset_storage(
+        &mut self,
+        approved: bool,
+    ) -> Result<StorageEventReceiptV2, SwarmAiErrorV1> {
+        require_explicit_consent("reset_storage", approved)?;
+        self.require_permission(BrowserStoragePermissionV1::ResetStorage)?;
+        self.provider.clear_cache();
+        self.sensitive_state_cleared = true;
+        self.record_receipt(
+            StorageEventActionV2::Reset,
+            None,
+            None,
+            None,
+            0,
+            StorageEventStatusV1::Succeeded,
+        )
+    }
+
+    pub fn upload_blob(
+        &mut self,
+        bytes: Vec<u8>,
+        approved: bool,
+    ) -> Result<(UploadResponseV1, StorageEventReceiptV2), SwarmAiErrorV1> {
+        require_explicit_consent("upload_blob", approved)?;
+        self.require_permission(BrowserStoragePermissionV1::Upload)?;
+        let content_hash = sha256_content_hash(&bytes);
+        let upload = self.provider.upload_bytes_with_approval(bytes, true)?;
+        let receipt = self.record_receipt(
+            StorageEventActionV2::Upload,
+            None,
+            Some(upload.reference.clone()),
+            Some(content_hash),
+            upload.size_bytes as u64,
+            StorageEventStatusV1::Succeeded,
+        )?;
+        Ok((upload, receipt))
+    }
+
+    pub fn upload_file(
+        &mut self,
+        bytes: Vec<u8>,
+        _file_name: impl AsRef<str>,
+        approved: bool,
+    ) -> Result<(UploadResponseV1, StorageEventReceiptV2), SwarmAiErrorV1> {
+        self.upload_blob(bytes, approved)
+    }
+
+    pub fn upload_manifest(
+        &mut self,
+        manifest_json: Vec<u8>,
+        approved: bool,
+    ) -> Result<(UploadResponseV1, StorageEventReceiptV2), SwarmAiErrorV1> {
+        self.upload_blob(manifest_json, approved)
+    }
+
+    pub fn upload_directory(
+        &mut self,
+        root: &Path,
+        approved: bool,
+    ) -> Result<(UploadResponseV1, StorageEventReceiptV2), SwarmAiErrorV1> {
+        require_explicit_consent("upload_directory", approved)?;
+        self.require_permission(BrowserStoragePermissionV1::Upload)?;
+        let Some(fallback) = self.provider.fallback.as_mut() else {
+            return Err(SwarmAiErrorV1::new(
+                ErrorCode::UnsupportedOperation,
+                "browser Swarm directory upload requires an attached provider runtime",
+            ));
+        };
+        let upload = fallback.upload_directory(root)?;
+        let receipt = self.record_receipt(
+            StorageEventActionV2::Upload,
+            None,
+            Some(upload.reference.clone()),
+            Some(format!("directory-ref:{}", upload.reference)),
+            upload.size_bytes as u64,
+            StorageEventStatusV1::Succeeded,
+        )?;
+        Ok((upload, receipt))
+    }
+
+    pub fn retrieve(
+        &mut self,
+        reference: &str,
+        expected_content_hash: Option<&str>,
+    ) -> Result<
+        (
+            DownloadResponseV1,
+            BrowserSwarmRetrievalV1,
+            StorageEventReceiptV2,
+        ),
+        SwarmAiErrorV1,
+    > {
+        self.require_permission(BrowserStoragePermissionV1::Retrieve)?;
+        let (download, retrieval) = self.provider.retrieve_with_report(reference)?;
+        let content_hash = sha256_content_hash(&download.bytes);
+        if let Some(expected) = expected_content_hash
+            && !content_hash_matches(expected, &content_hash)
+        {
+            return Err(SwarmAiErrorV1::new(
+                ErrorCode::ValidationFailed,
+                "retrieved bytes did not match expected content hash",
+            )
+            .with_details(json!({
+                "ref": reference,
+                "expected": expected,
+                "actual": content_hash,
+            })));
+        }
+        let receipt = self.record_receipt(
+            StorageEventActionV2::Retrieve,
+            None,
+            Some(download.reference.clone()),
+            Some(content_hash),
+            download.size_bytes as u64,
+            StorageEventStatusV1::Succeeded,
+        )?;
+        Ok((download, retrieval, receipt))
+    }
+
+    pub fn update_feed(
+        &mut self,
+        topic: &str,
+        owner: &str,
+        reference: &str,
+        approved: bool,
+    ) -> Result<(StorageFeedUpdateResultV1, StorageEventReceiptV2), SwarmAiErrorV1> {
+        require_explicit_consent("update_feed", approved)?;
+        self.require_permission(BrowserStoragePermissionV1::FeedUpdate)?;
+        let Some(fallback) = self.provider.fallback.as_mut() else {
+            return Err(SwarmAiErrorV1::new(
+                ErrorCode::UnsupportedOperation,
+                "browser Swarm feed update requires an attached provider runtime",
+            ));
+        };
+        let update = fallback.update_feed(topic, owner, reference)?;
+        let receipt = self.record_receipt(
+            StorageEventActionV2::FeedUpdate,
+            Some(topic.to_string()),
+            Some(reference.to_string()),
+            None,
+            0,
+            StorageEventStatusV1::Succeeded,
+        )?;
+        self.feed_updates.push(update.clone());
+        Ok((update, receipt))
+    }
+
+    pub fn clear_sensitive_state(
+        &mut self,
+        approved: bool,
+    ) -> Result<(StorageEventReceiptV2, BrowserStorageStateReportV1), SwarmAiErrorV1> {
+        require_explicit_consent("clear_sensitive_state", approved)?;
+        self.require_session()?;
+        self.provider.clear_cache();
+        self.sensitive_state_cleared = true;
+        let receipt = self.record_receipt(
+            StorageEventActionV2::ClearState,
+            None,
+            None,
+            None,
+            0,
+            StorageEventStatusV1::Succeeded,
+        )?;
+        let report = self.state_report()?;
+        Ok((receipt, report))
+    }
+
+    pub fn state_report(&mut self) -> Result<BrowserStorageStateReportV1, SwarmAiErrorV1> {
+        let session = self.require_session()?.clone();
+        let mut entries = Vec::new();
+        let cache_status = self.provider.cache_status();
+        if cache_status.entry_count > 0 && !self.sensitive_state_cleared {
+            entries.push(BrowserStorageStateEntryV1 {
+                state_kind: "indexed-db-cache".to_string(),
+                key_ref: "local://browser-storage/indexed-db/cache".to_string(),
+                sensitive: false,
+                clearable: true,
+                size_bytes: Some(cache_status.used_bytes),
+            });
+        }
+        if !self.receipts.is_empty() && !self.sensitive_state_cleared {
+            entries.push(BrowserStorageStateEntryV1 {
+                state_kind: "receipt-index".to_string(),
+                key_ref: "local://browser-storage/receipts".to_string(),
+                sensitive: true,
+                clearable: true,
+                size_bytes: None,
+            });
+        }
+        let mut report =
+            browser_storage_state_report(&session, entries, vec![format!("{}/", self.origin)]);
+        sign_browser_storage_state_report(&mut report).map_err(signature_error)?;
+        Ok(report)
+    }
+
+    pub fn publish_one_blob(
+        &mut self,
+        bytes: Vec<u8>,
+    ) -> Result<BrowserPublishOneResultV1, SwarmAiErrorV1> {
+        let expected_bytes = bytes.clone();
+        let requested_bytes = (bytes.len() as u64).max(1024 * 1024);
+        let probe = self.probe_capabilities(
+            vec!["mock-wallet".to_string()],
+            Some(requested_bytes.max(self.provider.config.cache.max_bytes)),
+        )?;
+        let quote = self.quote_purchase(requested_bytes, 60 * 60, zero_dev_storage_cost())?;
+        let authorization = self.authorize_purchase(
+            true,
+            "Approve mock browser storage purchase for Hivemind publish-one pilot",
+        )?;
+        self.buy_or_reuse_storage(true, false)?;
+        let content_hash = sha256_content_hash(&bytes);
+        let (upload, _upload_receipt) = self.upload_blob(bytes, true)?;
+        let (download, retrieval, _retrieve_receipt) =
+            self.retrieve(&upload.reference, Some(&content_hash))?;
+        let state_report = self.state_report()?;
+        Ok(BrowserPublishOneResultV1 {
+            schema_version: BROWSER_PUBLISH_ONE_RESULT_SCHEMA_VERSION.to_string(),
+            provider: self.provider_contract.clone(),
+            probe,
+            quote,
+            authorization,
+            session: self.require_session()?.clone(),
+            upload,
+            retrieval,
+            content_hash,
+            retrieved_size_bytes: download.size_bytes,
+            verified_round_trip: download.bytes == expected_bytes,
+            receipts: self.receipts.clone(),
+            state_report,
+            warnings: self.provider_contract.warnings.clone(),
+        })
+    }
+
+    fn require_probe(&self) -> Result<&BrowserStorageCapabilityProbeV1, SwarmAiErrorV1> {
+        self.probe
+            .as_ref()
+            .ok_or_else(|| missing_pilot_state("probe", "probe_capabilities"))
+    }
+
+    fn require_quote(&self) -> Result<&BrowserStoragePurchaseQuoteV1, SwarmAiErrorV1> {
+        self.quote
+            .as_ref()
+            .ok_or_else(|| missing_pilot_state("quote", "quote_purchase"))
+    }
+
+    fn require_authorization(
+        &self,
+    ) -> Result<&BrowserStoragePurchaseAuthorizationV1, SwarmAiErrorV1> {
+        self.authorization
+            .as_ref()
+            .ok_or_else(|| missing_pilot_state("authorization", "authorize_purchase"))
+    }
+
+    fn require_session(&self) -> Result<&BrowserStorageSessionV2, SwarmAiErrorV1> {
+        self.session
+            .as_ref()
+            .ok_or_else(|| missing_pilot_state("session", "start_session"))
+    }
+
+    fn require_permission(
+        &self,
+        permission: BrowserStoragePermissionV1,
+    ) -> Result<(), SwarmAiErrorV1> {
+        let session = self.require_session()?;
+        if session.permissions.contains(&permission) {
+            Ok(())
+        } else {
+            Err(SwarmAiErrorV1::new(
+                ErrorCode::AccessDenied,
+                "browser storage session does not include the requested permission",
+            )
+            .with_details(json!({ "permission": permission })))
+        }
+    }
+
+    fn record_receipt(
+        &mut self,
+        action: StorageEventActionV2,
+        feed_topic: Option<String>,
+        reference: Option<String>,
+        content_hash: Option<String>,
+        byte_size: u64,
+        status: StorageEventStatusV1,
+    ) -> Result<StorageEventReceiptV2, SwarmAiErrorV1> {
+        let session = self.require_session()?.clone();
+        let mut receipt = storage_event_receipt_v2(
+            &session,
+            action,
+            reference,
+            content_hash,
+            byte_size,
+            BrowserStorageEncryptionModeV1::None,
+            status,
+            None,
+        );
+        receipt.feed_topic = feed_topic;
+        sign_storage_event_receipt_v2(&mut receipt).map_err(signature_error)?;
+        self.receipts.push(receipt.clone());
+        Ok(receipt)
+    }
+}
+
 impl<F: StorageProvider> StorageProvider for BrowserSwarmProvider<F> {
     fn get_status(&self) -> StorageStatusV1 {
         let status = self.status();
@@ -659,6 +1314,56 @@ fn upload_requires_approval() -> SwarmAiErrorV1 {
     )
 }
 
+fn require_explicit_consent(action: &str, approved: bool) -> Result<(), SwarmAiErrorV1> {
+    if approved {
+        Ok(())
+    } else {
+        Err(SwarmAiErrorV1::new(
+            ErrorCode::AccessDenied,
+            "browser storage action requires explicit user approval",
+        )
+        .with_details(json!({ "action": action })))
+    }
+}
+
+fn missing_pilot_state(state: &str, required_method: &str) -> SwarmAiErrorV1 {
+    SwarmAiErrorV1::new(
+        ErrorCode::InvalidRequest,
+        "browser publish-one pilot lifecycle state is missing",
+    )
+    .with_details(json!({
+        "missing": state,
+        "requiredMethod": required_method,
+    }))
+}
+
+fn signature_error(error: serde_json::Error) -> SwarmAiErrorV1 {
+    SwarmAiErrorV1::new(
+        ErrorCode::ExecutionFailed,
+        "failed to sign browser storage lifecycle object",
+    )
+    .with_details(json!({ "error": error.to_string() }))
+}
+
+fn sha256_content_hash(bytes: &[u8]) -> String {
+    format!("sha256:{}", sha256_hex(bytes))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
+}
+
+fn content_hash_matches(expected: &str, actual: &str) -> bool {
+    let expected = expected.strip_prefix("sha256:").unwrap_or(expected);
+    let actual = actual.strip_prefix("sha256:").unwrap_or(actual);
+    expected == actual
+}
+
 fn base64_encode(bytes: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
@@ -685,7 +1390,10 @@ fn base64_encode(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hivemind_storage::{LocalDirectoryStorageProvider, StorageProvider};
+    use hivemind_storage::{
+        LocalDirectoryStorageProvider, MemoryStorageProvider, StorageProvider,
+        verify_browser_storage_state_report, verify_storage_event_receipt_v2,
+    };
     use std::fs;
 
     #[test]
@@ -745,5 +1453,123 @@ mod tests {
         let error = provider.upload_bytes(vec![1, 2, 3]).unwrap_err();
 
         assert_eq!(error.code, ErrorCode::AccessDenied);
+    }
+
+    #[test]
+    fn publish_one_pilot_round_trips_and_signs_receipts() {
+        let storage = MemoryStorageProvider::default();
+        let mut pilot = BrowserPublishOnePilot::mock_with_fallback(
+            default_browser_swarm_config(),
+            storage,
+            "https://hivemind.local",
+            "0x0000000000000000000000000000000000000001",
+        );
+
+        let result = pilot
+            .publish_one_blob(b"browser publish-one pilot".to_vec())
+            .unwrap();
+
+        assert_eq!(
+            result.provider.schema_version,
+            BROWSER_SWARM_STORAGE_PROVIDER_V6_SCHEMA_VERSION
+        );
+        assert_eq!(
+            result.provider.readiness,
+            BrowserSwarmReadinessLabelV1::BrowserTest
+        );
+        assert!(result.verified_round_trip);
+        assert!(result.content_hash.starts_with("sha256:"));
+        assert!(result.receipts.iter().any(|receipt| {
+            receipt.action == StorageEventActionV2::Upload
+                && receipt.reference.as_deref() == Some(result.upload.reference.as_str())
+        }));
+        assert!(
+            result
+                .receipts
+                .iter()
+                .all(|receipt| verify_storage_event_receipt_v2(receipt).valid)
+        );
+        assert!(verify_browser_storage_state_report(&result.state_report).valid);
+    }
+
+    #[test]
+    fn publish_one_pilot_refuses_upload_without_consent() {
+        let storage = MemoryStorageProvider::default();
+        let mut pilot = BrowserPublishOnePilot::mock_with_fallback(
+            default_browser_swarm_config(),
+            storage,
+            "https://hivemind.local",
+            "0x0000000000000000000000000000000000000001",
+        );
+
+        pilot
+            .probe_capabilities(vec!["mock-wallet".to_string()], Some(1024 * 1024))
+            .unwrap();
+        pilot
+            .quote_purchase(1024 * 1024, 60 * 60, zero_dev_storage_cost())
+            .unwrap();
+        pilot
+            .authorize_purchase(true, "Approve mock storage")
+            .unwrap();
+        pilot.buy_or_reuse_storage(true, false).unwrap();
+
+        let error = pilot
+            .upload_blob(b"no consent".to_vec(), false)
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::AccessDenied);
+        assert!(
+            !pilot
+                .receipts()
+                .iter()
+                .any(|receipt| receipt.action == StorageEventActionV2::Upload)
+        );
+    }
+
+    #[test]
+    fn publish_one_pilot_records_feed_reset_and_clear_state() {
+        let storage = MemoryStorageProvider::default();
+        let mut pilot = BrowserPublishOnePilot::mock_with_fallback(
+            default_browser_swarm_config(),
+            storage,
+            "https://hivemind.local",
+            "0x0000000000000000000000000000000000000001",
+        );
+
+        pilot
+            .probe_capabilities(vec!["mock-wallet".to_string()], Some(1024 * 1024))
+            .unwrap();
+        pilot
+            .quote_purchase(1024 * 1024, 60 * 60, zero_dev_storage_cost())
+            .unwrap();
+        pilot
+            .authorize_purchase(true, "Approve mock storage")
+            .unwrap();
+        pilot.buy_or_reuse_storage(true, false).unwrap();
+        let (upload, _) = pilot.upload_blob(b"feed target".to_vec(), true).unwrap();
+
+        let (feed_update, feed_receipt) = pilot
+            .update_feed(
+                "hivemind-test-feed",
+                "0x0000000000000000000000000000000000000001",
+                &upload.reference,
+                true,
+            )
+            .unwrap();
+        let reset_receipt = pilot.reset_storage(true).unwrap();
+        let (clear_receipt, clear_report) = pilot.clear_sensitive_state(true).unwrap();
+
+        assert_eq!(
+            feed_update.pointer.target_ref.as_deref(),
+            Some(upload.reference.as_str())
+        );
+        assert_eq!(feed_receipt.action, StorageEventActionV2::FeedUpdate);
+        assert_eq!(reset_receipt.action, StorageEventActionV2::Reset);
+        assert_eq!(clear_receipt.action, StorageEventActionV2::ClearState);
+        assert!(clear_report.indexed_db_entries.is_empty());
+        assert!(verify_storage_event_receipt_v2(&feed_receipt).valid);
+        assert!(verify_storage_event_receipt_v2(&reset_receipt).valid);
+        assert!(verify_storage_event_receipt_v2(&clear_receipt).valid);
+        assert!(verify_browser_storage_state_report(&clear_report).valid);
     }
 }

@@ -1,11 +1,11 @@
-use chrono::{SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use hivemind_access::evaluate_execution_access_with_revocations;
 use hivemind_core::{
     AIWorkloadV1, AccessDecision, AccessEvaluationV1, AiRequestV1, ApiSurface, ArtifactGroup,
     CandidateRoute, ErrorCode, ExecutionRequestV1, ExecutionStatus, IntegrityTier, JobOrderV1,
     Modality, PolicyMode, PriceModel, PriceV1, PrivacyTier, RouteDecision, RouteEstimate,
-    RoutePlanV1, RunnerDescriptorV1, RunnerPriceEntryV1, RunnerType, TrustPolicyV1,
-    ValidationIssue, evaluate_package_policy, hash_canonical_json,
+    RoutePlanV1, RunnerDescriptorV1, RunnerPriceEntryV1, RunnerType, StandardErrorCodeV1,
+    TrustPolicyV1, ValidationIssue, evaluate_package_policy, hash_canonical_json,
     job_order_from_execution_request, manifest_supports_capability, policy_route_block_reason,
     trust_policy_allows_runner,
 };
@@ -17,10 +17,27 @@ use hivemind_miner::{MinerBenchmarkResultV1, MinerDaemonStatus, MinerHeartbeatV1
 use hivemind_package::LocalPackage;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
+pub const ROUTE_PLAN_V2_SCHEMA_VERSION: &str = "hivemind.route_plan.v2";
+pub const ROUTE_PLAN_V2_VERIFICATION_SCHEMA_VERSION: &str = "hivemind.route_plan_verification.v2";
+pub const ROUTE_FAILURE_ANALYSIS_SCHEMA_VERSION: &str = "hivemind.route_failure_analysis.v1";
+pub const ROUTE_FAILURE_ANALYSIS_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.route_failure_analysis_verification.v1";
+pub const CAPACITY_RESERVATION_SCHEMA_VERSION: &str = "hivemind.capacity_reservation.v1";
+pub const CAPACITY_RESERVATION_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.capacity_reservation_verification.v1";
+pub const RETRY_DECISION_SCHEMA_VERSION: &str = "hivemind.retry_decision.v1";
+pub const RETRY_DECISION_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.retry_decision_verification.v1";
+
+const DEV_ROUTE_PLAN_V2_SIGNATURE_PREFIX: &str = "dev-route-plan-signature-v2";
+const DEV_ROUTE_FAILURE_ANALYSIS_SIGNATURE_PREFIX: &str = "dev-route-failure-analysis-signature-v1";
+const DEV_CAPACITY_RESERVATION_SIGNATURE_PREFIX: &str = "dev-capacity-reservation-signature-v1";
+const DEV_RETRY_DECISION_SIGNATURE_PREFIX: &str = "dev-retry-decision-signature-v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CostQuoteV1 {
@@ -116,6 +133,345 @@ pub struct RoutePlannerReportV1 {
         skip_serializing_if = "Option::is_none"
     )]
     pub planning_timing: Option<RoutePlannerTimingV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RoutePrivacyCheckV1 {
+    pub privacy: String,
+    #[serde(rename = "localExecution")]
+    pub local_execution: bool,
+    #[serde(rename = "remoteExecution")]
+    pub remote_execution: bool,
+    pub passed: bool,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RoutePriceEstimateV1 {
+    pub amount: f64,
+    pub currency: String,
+    #[serde(rename = "queueMs")]
+    pub queue_ms: u64,
+    #[serde(rename = "firstOutputMs")]
+    pub first_output_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RouteCacheHintV1 {
+    #[serde(rename = "warmCache")]
+    pub warm_cache: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RouteCapacityHintV1 {
+    #[serde(
+        rename = "queueDepth",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub queue_depth: Option<u32>,
+    #[serde(rename = "queueMs")]
+    pub queue_ms: u64,
+    #[serde(rename = "availableNow")]
+    pub available_now: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RouteCandidateV2 {
+    #[serde(rename = "routeId")]
+    pub route_id: String,
+    #[serde(rename = "runnerId", default, skip_serializing_if = "Option::is_none")]
+    pub runner_id: Option<String>,
+    #[serde(rename = "runnerType")]
+    pub runner_type: RunnerType,
+    #[serde(
+        rename = "artifactGroup",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub artifact_group: Option<String>,
+    pub decision: RouteDecision,
+    pub score: f64,
+    #[serde(rename = "privacyCheck")]
+    pub privacy_check: RoutePrivacyCheckV1,
+    #[serde(rename = "priceEstimate")]
+    pub price_estimate: RoutePriceEstimateV1,
+    #[serde(rename = "cacheHint")]
+    pub cache_hint: RouteCacheHintV1,
+    #[serde(rename = "capacityHint")]
+    pub capacity_hint: RouteCapacityHintV1,
+    #[serde(rename = "reasonsRejected")]
+    pub reasons_rejected: Vec<String>,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RoutePlanV2 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "planId")]
+    pub plan_id: String,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+    #[serde(rename = "packageRef")]
+    pub package_ref: String,
+    pub task: String,
+    pub candidates: Vec<RouteCandidateV2>,
+    #[serde(
+        rename = "selectedRouteId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub selected_route_id: Option<String>,
+    #[serde(
+        rename = "selectedRunnerId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub selected_runner_id: Option<String>,
+    #[serde(rename = "fallbackRouteIds")]
+    pub fallback_route_ids: Vec<String>,
+    #[serde(rename = "fallbackRunnerIds")]
+    pub fallback_runner_ids: Vec<String>,
+    #[serde(rename = "reasonsRejected")]
+    pub reasons_rejected: Vec<String>,
+    pub reason: String,
+    #[serde(rename = "generatedAt")]
+    pub generated_at: String,
+    #[serde(
+        rename = "sourceReportRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_report_ref: Option<String>,
+    #[serde(rename = "projectionWarnings")]
+    pub projection_warnings: Vec<String>,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RoutePlanV2VerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "planId")]
+    pub plan_id: String,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RouteFailureStageV1 {
+    Planning,
+    Reservation,
+    Lease,
+    Execution,
+    Streaming,
+    Validation,
+    Settlement,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RouteNextActionV1 {
+    Retry,
+    Replan,
+    AskUser,
+    Escalate,
+    Fail,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RouteFailureAnalysisV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "analysisId")]
+    pub analysis_id: String,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+    #[serde(rename = "routeId", default, skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
+    #[serde(rename = "failureStage")]
+    pub failure_stage: RouteFailureStageV1,
+    #[serde(
+        rename = "failedRunnerId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub failed_runner_id: Option<String>,
+    #[serde(rename = "errorCode")]
+    pub error_code: StandardErrorCodeV1,
+    pub retryable: bool,
+    #[serde(rename = "privacyImpact")]
+    pub privacy_impact: String,
+    #[serde(rename = "paymentImpact")]
+    pub payment_impact: String,
+    #[serde(rename = "userVisibleMessage")]
+    pub user_visible_message: String,
+    #[serde(rename = "nextAction")]
+    pub next_action: RouteNextActionV1,
+    #[serde(rename = "evidenceRefs")]
+    pub evidence_refs: Vec<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RouteFailureAnalysisVerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "analysisId")]
+    pub analysis_id: String,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CapacityResourceEstimateV1 {
+    #[serde(rename = "runnerType")]
+    pub runner_type: RunnerType,
+    #[serde(rename = "estimatedQueueMs")]
+    pub estimated_queue_ms: u64,
+    #[serde(rename = "estimatedFirstOutputMs")]
+    pub estimated_first_output_ms: u64,
+    #[serde(
+        rename = "estimatedInputTokens",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub estimated_input_tokens: Option<u64>,
+    #[serde(
+        rename = "estimatedOutputTokens",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub estimated_output_tokens: Option<u64>,
+    #[serde(
+        rename = "estimatedPrice",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub estimated_price: Option<PriceV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CapacityReservationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "reservationId")]
+    pub reservation_id: String,
+    #[serde(rename = "runnerId")]
+    pub runner_id: String,
+    #[serde(rename = "jobId")]
+    pub job_id: String,
+    #[serde(rename = "routeId", default, skip_serializing_if = "Option::is_none")]
+    pub route_id: Option<String>,
+    #[serde(rename = "resourceEstimate")]
+    pub resource_estimate: CapacityResourceEstimateV1,
+    pub expiry: String,
+    #[serde(rename = "priceLock", default, skip_serializing_if = "Option::is_none")]
+    pub price_lock: Option<PriceV1>,
+    #[serde(rename = "cancellationPolicy")]
+    pub cancellation_policy: Value,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CapacityReservationVerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "reservationId")]
+    pub reservation_id: String,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RetryActionV1 {
+    Retry,
+    Fail,
+    Escalate,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RetryPolicySnapshotV1 {
+    #[serde(rename = "maxAttempts")]
+    pub max_attempts: u32,
+    #[serde(rename = "delayMs")]
+    pub delay_ms: u64,
+    #[serde(rename = "retryableCodes")]
+    pub retryable_codes: Vec<StandardErrorCodeV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RetryDecisionV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "decisionId")]
+    pub decision_id: String,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+    #[serde(rename = "previousAttempt")]
+    pub previous_attempt: RouteAttemptV1,
+    pub reason: String,
+    #[serde(rename = "retryPolicy")]
+    pub retry_policy: RetryPolicySnapshotV1,
+    #[serde(
+        rename = "selectedNextRunnerId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub selected_next_runner_id: Option<String>,
+    #[serde(
+        rename = "selectedNextRouteId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub selected_next_route_id: Option<String>,
+    #[serde(rename = "delayMs")]
+    pub delay_ms: u64,
+    #[serde(rename = "maxAttempts")]
+    pub max_attempts: u32,
+    pub action: RetryActionV1,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RetryDecisionVerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "decisionId")]
+    pub decision_id: String,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1262,6 +1618,679 @@ pub fn verify_route_decision_proof(
     }
 }
 
+pub fn route_plan_v2_from_report(report: &RoutePlannerReportV1) -> RoutePlanV2 {
+    let candidates: Vec<_> = report
+        .plan
+        .candidate_routes
+        .iter()
+        .map(|candidate| route_candidate_v2_from_report(candidate, report))
+        .collect();
+    let selected_runner_id = report.plan.selected_route_id.as_ref().and_then(|route_id| {
+        candidates
+            .iter()
+            .find(|candidate| candidate.route_id == *route_id)
+            .and_then(|candidate| candidate.runner_id.clone())
+    });
+    let fallback_runner_ids = report
+        .plan
+        .fallback_route_ids
+        .iter()
+        .filter_map(|route_id| {
+            candidates
+                .iter()
+                .find(|candidate| candidate.route_id == *route_id)
+                .and_then(|candidate| candidate.runner_id.clone())
+        })
+        .collect();
+    let reasons_rejected = candidates
+        .iter()
+        .flat_map(|candidate| candidate.reasons_rejected.clone())
+        .collect();
+    let mut projection_warnings = Vec::new();
+    if report.planning_timing.is_none() {
+        projection_warnings.push(
+            "RoutePlannerReportV1 did not include planning timing; generatedAt uses projection time"
+                .to_string(),
+        );
+    }
+    if report.quotes.is_empty() {
+        projection_warnings.push(
+            "RoutePlannerReportV1 did not include quote records; price estimates came from candidate estimates"
+                .to_string(),
+        );
+    }
+    let mut plan = RoutePlanV2 {
+        schema_version: ROUTE_PLAN_V2_SCHEMA_VERSION.to_string(),
+        plan_id: String::new(),
+        request_id: report.plan.request_id.clone(),
+        package_ref: report.plan.package_ref.clone(),
+        task: report.plan.task.clone(),
+        candidates,
+        selected_route_id: report.plan.selected_route_id.clone(),
+        selected_runner_id,
+        fallback_route_ids: report.plan.fallback_route_ids.clone(),
+        fallback_runner_ids,
+        reasons_rejected,
+        reason: report.plan.reason.clone(),
+        generated_at: report
+            .planning_timing
+            .as_ref()
+            .map(|timing| timing.completed_at.clone())
+            .unwrap_or_else(|| Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)),
+        source_report_ref: Some(route_decision_ref(&report.plan.request_id)),
+        projection_warnings,
+        signature: String::new(),
+    };
+    sign_route_plan_v2(&mut plan);
+    plan
+}
+
+pub fn sign_route_plan_v2(plan: &mut RoutePlanV2) {
+    plan.signature = expected_route_plan_v2_signature(plan);
+    plan.plan_id = canonical_route_plan_v2_id(plan);
+}
+
+pub fn expected_route_plan_v2_signature(plan: &RoutePlanV2) -> String {
+    route_dev_signature(
+        DEV_ROUTE_PLAN_V2_SIGNATURE_PREFIX,
+        &route_plan_v2_signing_value(plan),
+    )
+}
+
+pub fn canonical_route_plan_v2_id(plan: &RoutePlanV2) -> String {
+    route_stable_id("route-plan", &route_plan_v2_signing_value(plan))
+}
+
+pub fn verify_route_plan_v2(plan: &RoutePlanV2) -> RoutePlanV2VerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_signature = expected_route_plan_v2_signature(plan);
+
+    if plan.schema_version != ROUTE_PLAN_V2_SCHEMA_VERSION {
+        issues.push(validation_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {ROUTE_PLAN_V2_SCHEMA_VERSION}"),
+        ));
+    }
+    validate_required_str(
+        &plan.plan_id,
+        "$.planId",
+        "Route plan id is required",
+        &mut issues,
+    );
+    if !plan.plan_id.trim().is_empty() && plan.plan_id != canonical_route_plan_v2_id(plan) {
+        issues.push(validation_issue(
+            "$.planId",
+            "Route plan id does not match canonical signed content",
+        ));
+    }
+    validate_required_str(
+        &plan.request_id,
+        "$.requestId",
+        "Request id is required",
+        &mut issues,
+    );
+    validate_required_str(
+        &plan.package_ref,
+        "$.packageRef",
+        "Package ref is required",
+        &mut issues,
+    );
+    validate_required_str(&plan.task, "$.task", "Task is required", &mut issues);
+    if plan.candidates.is_empty() {
+        issues.push(validation_issue(
+            "$.candidates",
+            "RoutePlanV2 requires at least one candidate",
+        ));
+    }
+    for (index, candidate) in plan.candidates.iter().enumerate() {
+        validate_route_candidate_v2(candidate, index, &mut issues, &mut warnings);
+    }
+    if let Some(selected_route_id) = plan.selected_route_id.as_deref() {
+        if !plan
+            .candidates
+            .iter()
+            .any(|candidate| candidate.route_id == selected_route_id)
+        {
+            issues.push(validation_issue(
+                "$.selectedRouteId",
+                "Selected route id must reference a candidate",
+            ));
+        }
+    } else {
+        warnings.push(validation_issue(
+            "$.selectedRouteId",
+            "RoutePlanV2 has no selected route; caller must inspect rejection reasons",
+        ));
+    }
+    for (index, fallback_route_id) in plan.fallback_route_ids.iter().enumerate() {
+        if !plan
+            .candidates
+            .iter()
+            .any(|candidate| candidate.route_id == *fallback_route_id)
+        {
+            issues.push(validation_issue(
+                format!("$.fallbackRouteIds[{index}]"),
+                "Fallback route id must reference a candidate",
+            ));
+        }
+    }
+    parse_route_time(
+        &plan.generated_at,
+        "$.generatedAt",
+        "Route plan generatedAt must be RFC3339",
+        &mut issues,
+    );
+    verify_route_signature(
+        &plan.signature,
+        &expected_signature,
+        DEV_ROUTE_PLAN_V2_SIGNATURE_PREFIX,
+        "$.signature",
+        "RoutePlanV2 signature does not match canonical dev signature",
+        &mut issues,
+    );
+
+    RoutePlanV2VerificationV1 {
+        schema_version: ROUTE_PLAN_V2_VERIFICATION_SCHEMA_VERSION.to_string(),
+        plan_id: plan.plan_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+pub fn capacity_reservation_from_plan(
+    plan: &RoutePlanV2,
+    job_id: impl Into<String>,
+    ttl_seconds: i64,
+) -> Option<CapacityReservationV1> {
+    let selected_route_id = plan.selected_route_id.as_ref()?;
+    let selected = plan
+        .candidates
+        .iter()
+        .find(|candidate| candidate.route_id == *selected_route_id)?;
+    let runner_id = selected.runner_id.clone()?;
+    let created_at = Utc::now();
+    let expiry = created_at + chrono::Duration::seconds(ttl_seconds.max(1));
+    let price_lock = Some(PriceV1 {
+        amount: selected.price_estimate.amount,
+        currency: selected.price_estimate.currency.clone(),
+    });
+    let mut reservation = CapacityReservationV1 {
+        schema_version: CAPACITY_RESERVATION_SCHEMA_VERSION.to_string(),
+        reservation_id: String::new(),
+        runner_id,
+        job_id: job_id.into(),
+        route_id: Some(selected.route_id.clone()),
+        resource_estimate: CapacityResourceEstimateV1 {
+            runner_type: selected.runner_type.clone(),
+            estimated_queue_ms: selected.capacity_hint.queue_ms,
+            estimated_first_output_ms: selected.price_estimate.first_output_ms,
+            estimated_input_tokens: None,
+            estimated_output_tokens: None,
+            estimated_price: price_lock.clone(),
+        },
+        expiry: expiry.to_rfc3339_opts(SecondsFormat::Secs, true),
+        price_lock,
+        cancellation_policy: json!({
+            "mode": "local-dev",
+            "releaseOnExpiry": true,
+            "releaseOnCancellation": true,
+            "productionLock": false
+        }),
+        created_at: created_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+        signature: String::new(),
+    };
+    sign_capacity_reservation(&mut reservation);
+    Some(reservation)
+}
+
+pub fn sign_capacity_reservation(reservation: &mut CapacityReservationV1) {
+    reservation.signature = expected_capacity_reservation_signature(reservation);
+    reservation.reservation_id = canonical_capacity_reservation_id(reservation);
+}
+
+pub fn expected_capacity_reservation_signature(reservation: &CapacityReservationV1) -> String {
+    route_dev_signature(
+        DEV_CAPACITY_RESERVATION_SIGNATURE_PREFIX,
+        &capacity_reservation_signing_value(reservation),
+    )
+}
+
+pub fn canonical_capacity_reservation_id(reservation: &CapacityReservationV1) -> String {
+    route_stable_id(
+        "capacity-reservation",
+        &capacity_reservation_signing_value(reservation),
+    )
+}
+
+pub fn verify_capacity_reservation(
+    reservation: &CapacityReservationV1,
+) -> CapacityReservationVerificationV1 {
+    let mut issues = Vec::new();
+    let warnings = Vec::new();
+    let expected_signature = expected_capacity_reservation_signature(reservation);
+
+    if reservation.schema_version != CAPACITY_RESERVATION_SCHEMA_VERSION {
+        issues.push(validation_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {CAPACITY_RESERVATION_SCHEMA_VERSION}"),
+        ));
+    }
+    validate_required_str(
+        &reservation.reservation_id,
+        "$.reservationId",
+        "Reservation id is required",
+        &mut issues,
+    );
+    if !reservation.reservation_id.trim().is_empty()
+        && reservation.reservation_id != canonical_capacity_reservation_id(reservation)
+    {
+        issues.push(validation_issue(
+            "$.reservationId",
+            "Reservation id does not match canonical signed content",
+        ));
+    }
+    validate_required_str(
+        &reservation.runner_id,
+        "$.runnerId",
+        "Runner id is required",
+        &mut issues,
+    );
+    validate_required_str(
+        &reservation.job_id,
+        "$.jobId",
+        "Job id is required",
+        &mut issues,
+    );
+    parse_route_time(
+        &reservation.created_at,
+        "$.createdAt",
+        "Capacity reservation createdAt must be RFC3339",
+        &mut issues,
+    );
+    let expiry = parse_route_time(
+        &reservation.expiry,
+        "$.expiry",
+        "Capacity reservation expiry must be RFC3339",
+        &mut issues,
+    );
+    if let Some(expiry) = expiry {
+        if expiry < Utc::now() {
+            issues.push(validation_issue(
+                "$.expiry",
+                "Capacity reservation has expired",
+            ));
+        }
+    }
+    if let Some(price) = &reservation.price_lock {
+        if !price.amount.is_finite() || price.amount < 0.0 {
+            issues.push(validation_issue(
+                "$.priceLock.amount",
+                "Price lock amount must be a finite non-negative number",
+            ));
+        }
+        validate_required_str(
+            &price.currency,
+            "$.priceLock.currency",
+            "Price lock currency is required",
+            &mut issues,
+        );
+    }
+    verify_route_signature(
+        &reservation.signature,
+        &expected_signature,
+        DEV_CAPACITY_RESERVATION_SIGNATURE_PREFIX,
+        "$.signature",
+        "CapacityReservationV1 signature does not match canonical dev signature",
+        &mut issues,
+    );
+
+    CapacityReservationVerificationV1 {
+        schema_version: CAPACITY_RESERVATION_VERIFICATION_SCHEMA_VERSION.to_string(),
+        reservation_id: reservation.reservation_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+pub fn route_failure_analysis_for_attempt(
+    request_id: impl Into<String>,
+    failure_stage: RouteFailureStageV1,
+    attempt: &RouteAttemptV1,
+    user_visible_message: impl Into<String>,
+    evidence_refs: Vec<String>,
+) -> RouteFailureAnalysisV1 {
+    route_failure_analysis_for_standard_error(
+        request_id,
+        attempt.route_id.clone().into(),
+        failure_stage,
+        attempt.runner_id.clone(),
+        attempt
+            .error_code
+            .map(standard_error_for_route_error)
+            .unwrap_or(StandardErrorCodeV1::InternalError),
+        user_visible_message,
+        evidence_refs,
+    )
+}
+
+pub fn route_failure_analysis_for_standard_error(
+    request_id: impl Into<String>,
+    route_id: Option<String>,
+    failure_stage: RouteFailureStageV1,
+    failed_runner_id: Option<String>,
+    error_code: StandardErrorCodeV1,
+    user_visible_message: impl Into<String>,
+    evidence_refs: Vec<String>,
+) -> RouteFailureAnalysisV1 {
+    let retryable = route_error_is_retryable(&error_code);
+    let mut analysis = RouteFailureAnalysisV1 {
+        schema_version: ROUTE_FAILURE_ANALYSIS_SCHEMA_VERSION.to_string(),
+        analysis_id: String::new(),
+        request_id: request_id.into(),
+        route_id,
+        failure_stage,
+        failed_runner_id,
+        error_code: error_code.clone(),
+        retryable,
+        privacy_impact: route_privacy_impact(&error_code).to_string(),
+        payment_impact: route_payment_impact(&error_code).to_string(),
+        user_visible_message: user_visible_message.into(),
+        next_action: route_next_action(&error_code, retryable),
+        evidence_refs,
+        created_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        signature: String::new(),
+    };
+    sign_route_failure_analysis(&mut analysis);
+    analysis
+}
+
+pub fn sign_route_failure_analysis(analysis: &mut RouteFailureAnalysisV1) {
+    analysis.signature = expected_route_failure_analysis_signature(analysis);
+    analysis.analysis_id = canonical_route_failure_analysis_id(analysis);
+}
+
+pub fn expected_route_failure_analysis_signature(analysis: &RouteFailureAnalysisV1) -> String {
+    route_dev_signature(
+        DEV_ROUTE_FAILURE_ANALYSIS_SIGNATURE_PREFIX,
+        &route_failure_analysis_signing_value(analysis),
+    )
+}
+
+pub fn canonical_route_failure_analysis_id(analysis: &RouteFailureAnalysisV1) -> String {
+    route_stable_id(
+        "route-failure",
+        &route_failure_analysis_signing_value(analysis),
+    )
+}
+
+pub fn verify_route_failure_analysis(
+    analysis: &RouteFailureAnalysisV1,
+) -> RouteFailureAnalysisVerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_signature = expected_route_failure_analysis_signature(analysis);
+
+    if analysis.schema_version != ROUTE_FAILURE_ANALYSIS_SCHEMA_VERSION {
+        issues.push(validation_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {ROUTE_FAILURE_ANALYSIS_SCHEMA_VERSION}"),
+        ));
+    }
+    validate_required_str(
+        &analysis.analysis_id,
+        "$.analysisId",
+        "Analysis id is required",
+        &mut issues,
+    );
+    if !analysis.analysis_id.trim().is_empty()
+        && analysis.analysis_id != canonical_route_failure_analysis_id(analysis)
+    {
+        issues.push(validation_issue(
+            "$.analysisId",
+            "Analysis id does not match canonical signed content",
+        ));
+    }
+    validate_required_str(
+        &analysis.request_id,
+        "$.requestId",
+        "Request id is required",
+        &mut issues,
+    );
+    validate_required_str(
+        &analysis.privacy_impact,
+        "$.privacyImpact",
+        "Privacy impact is required",
+        &mut issues,
+    );
+    validate_required_str(
+        &analysis.payment_impact,
+        "$.paymentImpact",
+        "Payment impact is required",
+        &mut issues,
+    );
+    validate_required_str(
+        &analysis.user_visible_message,
+        "$.userVisibleMessage",
+        "User visible message is required",
+        &mut issues,
+    );
+    if analysis.evidence_refs.is_empty() {
+        warnings.push(validation_issue(
+            "$.evidenceRefs",
+            "Route failure analysis should include evidenceRefs for audit replay",
+        ));
+    }
+    parse_route_time(
+        &analysis.created_at,
+        "$.createdAt",
+        "Route failure analysis createdAt must be RFC3339",
+        &mut issues,
+    );
+    verify_route_signature(
+        &analysis.signature,
+        &expected_signature,
+        DEV_ROUTE_FAILURE_ANALYSIS_SIGNATURE_PREFIX,
+        "$.signature",
+        "RouteFailureAnalysisV1 signature does not match canonical dev signature",
+        &mut issues,
+    );
+
+    RouteFailureAnalysisVerificationV1 {
+        schema_version: ROUTE_FAILURE_ANALYSIS_VERIFICATION_SCHEMA_VERSION.to_string(),
+        analysis_id: analysis.analysis_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+pub fn retry_decision_from_failure(
+    analysis: &RouteFailureAnalysisV1,
+    previous_attempt: RouteAttemptV1,
+    plan: Option<&RoutePlanV2>,
+    attempt_index: u32,
+    max_attempts: u32,
+    base_delay_ms: u64,
+) -> RetryDecisionV1 {
+    let retryable_codes = route_retryable_codes();
+    let can_retry = analysis.retryable && attempt_index < max_attempts;
+    let next = if can_retry {
+        plan.and_then(|plan| {
+            plan.fallback_route_ids
+                .iter()
+                .filter(|route_id| Some(route_id.as_str()) != analysis.route_id.as_deref())
+                .find_map(|route_id| {
+                    plan.candidates
+                        .iter()
+                        .find(|candidate| candidate.route_id == *route_id)
+                })
+        })
+    } else {
+        None
+    };
+    let action = if can_retry {
+        if next.is_some() {
+            RetryActionV1::Retry
+        } else {
+            RetryActionV1::Escalate
+        }
+    } else {
+        RetryActionV1::Fail
+    };
+    let delay_ms = if matches!(action, RetryActionV1::Retry) {
+        base_delay_ms.saturating_mul(u64::from(attempt_index.max(1)))
+    } else {
+        0
+    };
+    let reason = match action {
+        RetryActionV1::Retry => format!(
+            "Retrying after {:?} using next fallback route",
+            analysis.error_code
+        ),
+        RetryActionV1::Escalate => {
+            "Failure is retryable, but no fallback route is available".to_string()
+        }
+        RetryActionV1::Fail => format!(
+            "{:?} is not retryable or max attempts were reached",
+            analysis.error_code
+        ),
+    };
+    let mut decision = RetryDecisionV1 {
+        schema_version: RETRY_DECISION_SCHEMA_VERSION.to_string(),
+        decision_id: String::new(),
+        request_id: analysis.request_id.clone(),
+        previous_attempt,
+        reason,
+        retry_policy: RetryPolicySnapshotV1 {
+            max_attempts,
+            delay_ms: base_delay_ms,
+            retryable_codes,
+        },
+        selected_next_runner_id: next.and_then(|candidate| candidate.runner_id.clone()),
+        selected_next_route_id: next.map(|candidate| candidate.route_id.clone()),
+        delay_ms,
+        max_attempts,
+        action,
+        created_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        signature: String::new(),
+    };
+    sign_retry_decision(&mut decision);
+    decision
+}
+
+pub fn sign_retry_decision(decision: &mut RetryDecisionV1) {
+    decision.signature = expected_retry_decision_signature(decision);
+    decision.decision_id = canonical_retry_decision_id(decision);
+}
+
+pub fn expected_retry_decision_signature(decision: &RetryDecisionV1) -> String {
+    route_dev_signature(
+        DEV_RETRY_DECISION_SIGNATURE_PREFIX,
+        &retry_decision_signing_value(decision),
+    )
+}
+
+pub fn canonical_retry_decision_id(decision: &RetryDecisionV1) -> String {
+    route_stable_id("retry-decision", &retry_decision_signing_value(decision))
+}
+
+pub fn verify_retry_decision(decision: &RetryDecisionV1) -> RetryDecisionVerificationV1 {
+    let mut issues = Vec::new();
+    let warnings = Vec::new();
+    let expected_signature = expected_retry_decision_signature(decision);
+
+    if decision.schema_version != RETRY_DECISION_SCHEMA_VERSION {
+        issues.push(validation_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {RETRY_DECISION_SCHEMA_VERSION}"),
+        ));
+    }
+    validate_required_str(
+        &decision.decision_id,
+        "$.decisionId",
+        "Decision id is required",
+        &mut issues,
+    );
+    if !decision.decision_id.trim().is_empty()
+        && decision.decision_id != canonical_retry_decision_id(decision)
+    {
+        issues.push(validation_issue(
+            "$.decisionId",
+            "Retry decision id does not match canonical signed content",
+        ));
+    }
+    validate_required_str(
+        &decision.request_id,
+        "$.requestId",
+        "Request id is required",
+        &mut issues,
+    );
+    validate_required_str(
+        &decision.reason,
+        "$.reason",
+        "Retry reason is required",
+        &mut issues,
+    );
+    if decision.max_attempts == 0 {
+        issues.push(validation_issue(
+            "$.maxAttempts",
+            "Retry decision maxAttempts must be greater than zero",
+        ));
+    }
+    if decision.retry_policy.max_attempts != decision.max_attempts {
+        issues.push(validation_issue(
+            "$.retryPolicy.maxAttempts",
+            "Retry policy maxAttempts must match decision maxAttempts",
+        ));
+    }
+    if matches!(decision.action, RetryActionV1::Retry)
+        && decision
+            .selected_next_route_id
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .is_empty()
+    {
+        issues.push(validation_issue(
+            "$.selectedNextRouteId",
+            "Retry decisions require selectedNextRouteId",
+        ));
+    }
+    parse_route_time(
+        &decision.created_at,
+        "$.createdAt",
+        "Retry decision createdAt must be RFC3339",
+        &mut issues,
+    );
+    verify_route_signature(
+        &decision.signature,
+        &expected_signature,
+        DEV_RETRY_DECISION_SIGNATURE_PREFIX,
+        "$.signature",
+        "RetryDecisionV1 signature does not match canonical dev signature",
+        &mut issues,
+    );
+
+    RetryDecisionVerificationV1 {
+        schema_version: RETRY_DECISION_VERIFICATION_SCHEMA_VERSION.to_string(),
+        decision_id: decision.decision_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
 pub fn plan_route(
     request: &ExecutionRequestV1,
     package: &LocalPackage,
@@ -1406,6 +2435,332 @@ fn validation_issue(path: impl Into<String>, message: impl Into<String>) -> Vali
     ValidationIssue {
         path: path.into(),
         message: message.into(),
+    }
+}
+
+fn route_candidate_v2_from_report(
+    candidate: &CandidateRoute,
+    report: &RoutePlannerReportV1,
+) -> RouteCandidateV2 {
+    let quote = route_quote_for_candidate(&candidate.route_id, report);
+    let miner_capacity = report
+        .miner_capacity
+        .iter()
+        .find(|signal| signal.route_id == candidate.route_id);
+    let mut reasons = Vec::new();
+    if let Some(reason) = candidate.reason.clone() {
+        reasons.push(reason);
+    }
+    if let Some(quote) = quote {
+        reasons.extend(quote.reasons.clone());
+    }
+    reasons.sort();
+    reasons.dedup();
+    let reasons_rejected = if candidate.decision == RouteDecision::Rejected {
+        reasons.clone()
+    } else {
+        Vec::new()
+    };
+    let remote_execution = candidate.estimated.privacy != "local";
+    let privacy_reasons = if remote_execution {
+        vec!["Candidate requires remote execution privacy posture".to_string()]
+    } else {
+        vec!["Candidate can execute in local privacy posture".to_string()]
+    };
+    let privacy_passed = candidate.decision == RouteDecision::Eligible
+        || !reasons.iter().any(|reason| {
+            let lower = reason.to_ascii_lowercase();
+            lower.contains("privacy") || lower.contains("access")
+        });
+    let queue_ms = quote
+        .map(|quote| quote.queue_ms)
+        .unwrap_or(candidate.estimated.queue_ms);
+    let first_output_ms = quote
+        .map(|quote| quote.first_token_ms)
+        .unwrap_or(candidate.estimated.first_token_ms);
+    let warm_cache = quote
+        .map(|quote| quote.warm)
+        .unwrap_or_else(|| candidate.route_id.contains("warm"));
+    let queue_depth = miner_capacity.map(|signal| signal.queue_depth);
+    let score = score_candidate(candidate, &report.policy_mode);
+    RouteCandidateV2 {
+        route_id: candidate.route_id.clone(),
+        runner_id: candidate.runner_id.clone(),
+        runner_type: candidate.runner_type.clone(),
+        artifact_group: candidate.artifact_group.clone(),
+        decision: candidate.decision.clone(),
+        score: if score.is_finite() { score } else { 0.0 },
+        privacy_check: RoutePrivacyCheckV1 {
+            privacy: candidate.estimated.privacy.clone(),
+            local_execution: !remote_execution,
+            remote_execution,
+            passed: privacy_passed,
+            reasons: privacy_reasons,
+        },
+        price_estimate: RoutePriceEstimateV1 {
+            amount: quote
+                .map(|quote| quote.estimated_cost)
+                .unwrap_or(candidate.estimated.cost),
+            currency: quote
+                .map(|quote| quote.currency.clone())
+                .unwrap_or_else(|| candidate.estimated.currency.clone()),
+            queue_ms,
+            first_output_ms,
+        },
+        cache_hint: RouteCacheHintV1 {
+            warm_cache,
+            reason: if warm_cache {
+                "Runner reports a warm package/cache hint".to_string()
+            } else {
+                "No warm cache was reported for this route".to_string()
+            },
+        },
+        capacity_hint: RouteCapacityHintV1 {
+            queue_depth,
+            queue_ms,
+            available_now: candidate.decision == RouteDecision::Eligible && queue_ms < 30_000,
+            reason: miner_capacity
+                .map(|signal| {
+                    format!(
+                        "Miner capacity reports {}/{} active jobs",
+                        signal.active_jobs, signal.max_concurrent_jobs
+                    )
+                })
+                .unwrap_or_else(|| "Capacity inferred from route estimate".to_string()),
+        },
+        reasons_rejected,
+        reasons,
+    }
+}
+
+fn route_quote_for_candidate<'a>(
+    route_id: &str,
+    report: &'a RoutePlannerReportV1,
+) -> Option<&'a CostQuoteV1> {
+    report
+        .quotes
+        .iter()
+        .find(|quote| quote.route_id == route_id)
+}
+
+fn validate_route_candidate_v2(
+    candidate: &RouteCandidateV2,
+    index: usize,
+    issues: &mut Vec<ValidationIssue>,
+    warnings: &mut Vec<ValidationIssue>,
+) {
+    let path = format!("$.candidates[{index}]");
+    validate_required_str(
+        &candidate.route_id,
+        &format!("{path}.routeId"),
+        "Route candidate id is required",
+        issues,
+    );
+    if !candidate.score.is_finite() {
+        issues.push(validation_issue(
+            format!("{path}.score"),
+            "Route candidate score must be finite",
+        ));
+    }
+    if !candidate.price_estimate.amount.is_finite() || candidate.price_estimate.amount < 0.0 {
+        issues.push(validation_issue(
+            format!("{path}.priceEstimate.amount"),
+            "Route candidate price amount must be a finite non-negative number",
+        ));
+    }
+    validate_required_str(
+        &candidate.price_estimate.currency,
+        &format!("{path}.priceEstimate.currency"),
+        "Route candidate price currency is required",
+        issues,
+    );
+    validate_required_str(
+        &candidate.privacy_check.privacy,
+        &format!("{path}.privacyCheck.privacy"),
+        "Route candidate privacy label is required",
+        issues,
+    );
+    if candidate.decision == RouteDecision::Rejected && candidate.reasons_rejected.is_empty() {
+        issues.push(validation_issue(
+            format!("{path}.reasonsRejected"),
+            "Rejected route candidates require reasonsRejected",
+        ));
+    }
+    if candidate.cache_hint.reason.trim().is_empty() {
+        warnings.push(validation_issue(
+            format!("{path}.cacheHint.reason"),
+            "Cache hint reason is empty",
+        ));
+    }
+    if candidate.capacity_hint.reason.trim().is_empty() {
+        warnings.push(validation_issue(
+            format!("{path}.capacityHint.reason"),
+            "Capacity hint reason is empty",
+        ));
+    }
+}
+
+fn validate_required_str(
+    value: &str,
+    path: &str,
+    message: &str,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    if value.trim().is_empty() {
+        issues.push(validation_issue(path, message));
+    }
+}
+
+fn parse_route_time(
+    value: &str,
+    path: &str,
+    message: &str,
+    issues: &mut Vec<ValidationIssue>,
+) -> Option<chrono::DateTime<Utc>> {
+    match DateTime::parse_from_rfc3339(value) {
+        Ok(parsed) => Some(parsed.with_timezone(&Utc)),
+        Err(_) => {
+            issues.push(validation_issue(path, message));
+            None
+        }
+    }
+}
+
+fn route_stable_id(prefix: &str, value: &impl Serialize) -> String {
+    let value = serde_json::to_value(value).expect("route object should serialize");
+    format!("{prefix}-{}", &hash_canonical_json(&value)[..24])
+}
+
+fn route_dev_signature(prefix: &str, value: &Value) -> String {
+    format!("{prefix}:{}", hash_canonical_json(value))
+}
+
+fn verify_route_signature(
+    signature: &str,
+    expected_signature: &str,
+    expected_prefix: &str,
+    path: &str,
+    mismatch_message: &str,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    let signature = signature.trim();
+    if signature.is_empty() {
+        issues.push(validation_issue(path, "Signature is required"));
+    } else if signature == expected_signature {
+    } else if signature.starts_with(expected_prefix) {
+        issues.push(validation_issue(path, mismatch_message));
+    } else {
+        issues.push(validation_issue(
+            path,
+            "Signature is not a supported local-dev route signature",
+        ));
+    }
+}
+
+fn route_plan_v2_signing_value(plan: &RoutePlanV2) -> Value {
+    let mut value = serde_json::to_value(plan).expect("route plan v2 should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("planId");
+        object.remove("signature");
+    }
+    value
+}
+
+fn capacity_reservation_signing_value(reservation: &CapacityReservationV1) -> Value {
+    let mut value =
+        serde_json::to_value(reservation).expect("capacity reservation should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("reservationId");
+        object.remove("signature");
+    }
+    value
+}
+
+fn route_failure_analysis_signing_value(analysis: &RouteFailureAnalysisV1) -> Value {
+    let mut value =
+        serde_json::to_value(analysis).expect("route failure analysis should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("analysisId");
+        object.remove("signature");
+    }
+    value
+}
+
+fn retry_decision_signing_value(decision: &RetryDecisionV1) -> Value {
+    let mut value = serde_json::to_value(decision).expect("retry decision should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("decisionId");
+        object.remove("signature");
+    }
+    value
+}
+
+fn standard_error_for_route_error(error: ErrorCode) -> StandardErrorCodeV1 {
+    match error {
+        ErrorCode::PackageNotFound => StandardErrorCodeV1::PackageNotFound,
+        ErrorCode::UnsupportedTarget => StandardErrorCodeV1::UnsupportedRuntime,
+        ErrorCode::InvalidManifest => StandardErrorCodeV1::ManifestInvalid,
+        ErrorCode::AccessDenied => StandardErrorCodeV1::AccessDenied,
+        ErrorCode::RunnerOverloaded => StandardErrorCodeV1::RateLimited,
+        ErrorCode::DeadlineExceeded => StandardErrorCodeV1::RunnerTimeout,
+        ErrorCode::ExecutionFailed => StandardErrorCodeV1::InternalError,
+        ErrorCode::ValidationFailed => StandardErrorCodeV1::ValidationFailed,
+        ErrorCode::UnsupportedOperation => StandardErrorCodeV1::UnsupportedApi,
+        ErrorCode::InvalidRequest => StandardErrorCodeV1::InvalidRequest,
+    }
+}
+
+fn route_error_is_retryable(error_code: &StandardErrorCodeV1) -> bool {
+    route_retryable_codes().contains(error_code)
+}
+
+fn route_retryable_codes() -> Vec<StandardErrorCodeV1> {
+    vec![
+        StandardErrorCodeV1::RunnerTimeout,
+        StandardErrorCodeV1::RunnerUnhealthy,
+        StandardErrorCodeV1::QuoteExpired,
+        StandardErrorCodeV1::RateLimited,
+        StandardErrorCodeV1::PolicyBlocked,
+        StandardErrorCodeV1::StreamInterrupted,
+        StandardErrorCodeV1::StorageUnavailable,
+    ]
+}
+
+fn route_next_action(error_code: &StandardErrorCodeV1, retryable: bool) -> RouteNextActionV1 {
+    if retryable {
+        RouteNextActionV1::Retry
+    } else {
+        match error_code {
+            StandardErrorCodeV1::AccessDenied | StandardErrorCodeV1::LicenseNotSatisfied => {
+                RouteNextActionV1::AskUser
+            }
+            StandardErrorCodeV1::PaymentFailed | StandardErrorCodeV1::SettlementFailed => {
+                RouteNextActionV1::Escalate
+            }
+            _ => RouteNextActionV1::Fail,
+        }
+    }
+}
+
+fn route_privacy_impact(error_code: &StandardErrorCodeV1) -> &'static str {
+    match error_code {
+        StandardErrorCodeV1::AccessDenied
+        | StandardErrorCodeV1::LicenseNotSatisfied
+        | StandardErrorCodeV1::PolicyBlocked => {
+            "route may have violated an access, license, or privacy policy requirement"
+        }
+        _ => "no additional privacy exposure was recorded by the local route analysis",
+    }
+}
+
+fn route_payment_impact(error_code: &StandardErrorCodeV1) -> &'static str {
+    match error_code {
+        StandardErrorCodeV1::QuoteExpired
+        | StandardErrorCodeV1::PaymentFailed
+        | StandardErrorCodeV1::SettlementFailed => {
+            "quote, authorization, or settlement state must be refreshed before retry"
+        }
+        _ => "no payment capture was recorded by the local route analysis",
     }
 }
 
@@ -3099,6 +4454,205 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn route_plan_v2_explains_candidates_and_reserves_capacity() {
+        let package = local_package();
+        let request = request(&package);
+        let local = runner("local-dev", RunnerType::Local, "local-mock", "rust-mock", 0);
+        let capacity = miner_capacity(
+            "route-v2-miner",
+            hivemind_miner::MinerDaemonStatus::Available,
+            0,
+            0,
+        );
+        let policy = TrustPolicyV1::local_only("enterprise-user");
+        let report = planner_report_with_trust_policy(
+            &request,
+            &package,
+            &[local],
+            &[],
+            &[capacity],
+            PolicyMode::Balanced,
+            0,
+            &[],
+            Some(&policy),
+        );
+
+        let plan = route_plan_v2_from_report(&report);
+
+        assert_eq!(plan.schema_version, ROUTE_PLAN_V2_SCHEMA_VERSION);
+        assert_eq!(plan.selected_route_id.as_deref(), Some("local-local-dev"));
+        assert_eq!(plan.selected_runner_id.as_deref(), Some("local-dev"));
+        assert!(plan.candidates.iter().any(|candidate| {
+            candidate.route_id == "local-local-dev"
+                && candidate.privacy_check.passed
+                && candidate.capacity_hint.available_now
+                && !candidate.price_estimate.currency.is_empty()
+                && candidate.price_estimate.amount >= 0.0
+        }));
+        let rejected_miner = plan
+            .candidates
+            .iter()
+            .find(|candidate| candidate.route_id.starts_with("miner-offer-"))
+            .expect("miner candidate should be present");
+        assert_eq!(rejected_miner.decision, RouteDecision::Rejected);
+        assert!(!rejected_miner.reasons_rejected.is_empty());
+        assert!(
+            rejected_miner
+                .reasons_rejected
+                .iter()
+                .any(|reason| reason.contains("Trust policy does not allow"))
+        );
+        let plan_verification = verify_route_plan_v2(&plan);
+        assert!(plan_verification.valid, "{plan_verification:#?}");
+
+        let reservation = capacity_reservation_from_plan(&plan, "job-route-v2-1", 60)
+            .expect("selected route should be reservable before lease");
+        assert_eq!(reservation.runner_id, "local-dev");
+        assert_eq!(reservation.route_id.as_deref(), Some("local-local-dev"));
+        assert!(reservation.price_lock.is_some());
+        assert!(verify_capacity_reservation(&reservation).valid);
+
+        let mut tampered = reservation.clone();
+        tampered.price_lock.as_mut().unwrap().amount += 1.0;
+        let verification = verify_capacity_reservation(&tampered);
+        assert!(!verification.valid);
+        assert!(
+            verification
+                .issues
+                .iter()
+                .any(|issue| { issue.path == "$.reservationId" || issue.path == "$.signature" })
+        );
+    }
+
+    #[test]
+    fn route_failure_analysis_and_retry_decisions_cover_resilience_cases() {
+        let package = local_package();
+        let request = request(&package);
+        let local = runner("local-dev", RunnerType::Local, "local-mock", "rust-mock", 0);
+        let remote = runner(
+            "remote-dev",
+            RunnerType::RemoteGpu,
+            "local-mock",
+            "rust-mock",
+            0,
+        );
+        let report = planner_report(&request, &package, &[local, remote], PolicyMode::Balanced);
+        let plan = route_plan_v2_from_report(&report);
+        assert_eq!(plan.selected_route_id.as_deref(), Some("local-local-dev"));
+        assert!(
+            plan.fallback_route_ids
+                .contains(&"remote-remote-dev".to_string())
+        );
+
+        let failed_attempt = RouteAttemptV1 {
+            route_id: "local-local-dev".to_string(),
+            runner_id: Some("local-dev".to_string()),
+            runner_type: RunnerType::Local,
+            status: ExecutionStatus::Failed,
+            error_code: Some(ErrorCode::DeadlineExceeded),
+            error_message: Some("local runner timed out".to_string()),
+        };
+        let analysis = route_failure_analysis_for_attempt(
+            &request.request_id,
+            RouteFailureStageV1::Execution,
+            &failed_attempt,
+            "The selected runner timed out before producing output.",
+            vec![route_trace_ref(&request.request_id)],
+        );
+
+        assert_eq!(analysis.error_code, StandardErrorCodeV1::RunnerTimeout);
+        assert_eq!(analysis.next_action, RouteNextActionV1::Retry);
+        assert!(analysis.retryable);
+        assert!(verify_route_failure_analysis(&analysis).valid);
+
+        let retry = retry_decision_from_failure(&analysis, failed_attempt, Some(&plan), 1, 3, 250);
+        assert_eq!(retry.action, RetryActionV1::Retry);
+        assert_eq!(
+            retry.selected_next_route_id.as_deref(),
+            Some("remote-remote-dev")
+        );
+        assert_eq!(retry.selected_next_runner_id.as_deref(), Some("remote-dev"));
+        assert_eq!(retry.delay_ms, 250);
+        assert!(verify_retry_decision(&retry).valid);
+
+        for (code, message) in [
+            (
+                StandardErrorCodeV1::PolicyBlocked,
+                "A privacy or policy mismatch requires a different route.",
+            ),
+            (
+                StandardErrorCodeV1::QuoteExpired,
+                "The runner quote expired before execution could start.",
+            ),
+            (
+                StandardErrorCodeV1::RateLimited,
+                "The selected runner is overloaded.",
+            ),
+        ] {
+            let analysis = route_failure_analysis_for_standard_error(
+                &request.request_id,
+                Some("local-local-dev".to_string()),
+                RouteFailureStageV1::Planning,
+                Some("local-dev".to_string()),
+                code.clone(),
+                message,
+                vec![route_decision_ref(&request.request_id)],
+            );
+            assert_eq!(analysis.next_action, RouteNextActionV1::Retry);
+            assert!(analysis.retryable);
+            assert!(verify_route_failure_analysis(&analysis).valid);
+
+            let decision = retry_decision_from_failure(
+                &analysis,
+                RouteAttemptV1 {
+                    route_id: "local-local-dev".to_string(),
+                    runner_id: Some("local-dev".to_string()),
+                    runner_type: RunnerType::Local,
+                    status: ExecutionStatus::Failed,
+                    error_code: Some(ErrorCode::RunnerOverloaded),
+                    error_message: Some(message.to_string()),
+                },
+                Some(&plan),
+                1,
+                3,
+                250,
+            );
+            assert!(
+                matches!(
+                    decision.action,
+                    RetryActionV1::Retry | RetryActionV1::Escalate
+                ),
+                "{code:?} should produce a retry-path decision"
+            );
+            assert!(verify_retry_decision(&decision).valid);
+        }
+    }
+
+    #[test]
+    fn route_plan_v2_rejects_missing_required_fields_and_tampering() {
+        let package = local_package();
+        let request = request(&package);
+        let local = runner("local-dev", RunnerType::Local, "local-mock", "rust-mock", 0);
+        let report = planner_report(&request, &package, &[local], PolicyMode::Balanced);
+        let plan = route_plan_v2_from_report(&report);
+
+        let mut missing_request = serde_json::to_value(&plan).unwrap();
+        missing_request.as_object_mut().unwrap().remove("requestId");
+        assert!(serde_json::from_value::<RoutePlanV2>(missing_request).is_err());
+
+        let mut tampered = plan.clone();
+        tampered.reason = "changed after signing".to_string();
+        let verification = verify_route_plan_v2(&tampered);
+        assert!(!verification.valid);
+        assert!(
+            verification
+                .issues
+                .iter()
+                .any(|issue| { issue.path == "$.planId" || issue.path == "$.signature" })
+        );
     }
 
     #[test]

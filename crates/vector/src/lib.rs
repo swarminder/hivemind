@@ -7,6 +7,7 @@ use hivemind_identity::{IdentityKeypairV1, SignatureEnvelopeV1};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -22,6 +23,16 @@ pub const RAG_PIPELINE_V2_SCHEMA_VERSION: &str = "hivemind.rag_pipeline.v2";
 pub const CITATION_TRACE_SCHEMA_VERSION: &str = "hivemind.citation_trace.v1";
 pub const KNOWLEDGE_ASSET_VERIFICATION_SCHEMA_VERSION: &str =
     "hivemind.knowledge_asset_verification.v1";
+pub const RAG_INGEST_REQUEST_SCHEMA_VERSION: &str = "hivemind.rag_ingest_request.v1";
+pub const RAG_CHUNK_RECORD_SCHEMA_VERSION: &str = "hivemind.rag_chunk_record.v1";
+pub const RAG_EMBEDDING_RECORD_SCHEMA_VERSION: &str = "hivemind.rag_embedding_record.v1";
+pub const RAG_INDEX_SNAPSHOT_SCHEMA_VERSION: &str = "hivemind.rag_index_snapshot.v1";
+pub const RAG_INGEST_RESULT_SCHEMA_VERSION: &str = "hivemind.rag_ingest_result.v1";
+pub const RAG_SEARCH_REQUEST_SCHEMA_VERSION: &str = "hivemind.rag_search_request.v1";
+pub const RAG_SEARCH_RESULT_SCHEMA_VERSION: &str = "hivemind.rag_search_result.v1";
+pub const RAG_ASK_REQUEST_SCHEMA_VERSION: &str = "hivemind.rag_ask_request.v1";
+pub const RAG_ANSWER_RECEIPT_SCHEMA_VERSION: &str = "hivemind.rag_answer_receipt.v1";
+pub const RAG_ANSWER_RESULT_SCHEMA_VERSION: &str = "hivemind.rag_answer_result.v1";
 
 const DEV_VECTOR_STORE_SIGNATURE_PREFIX: &str = "dev-vector-store-signature-v1";
 const DEV_KNOWLEDGE_SIGNATURE_PREFIX: &str = "dev-knowledge-signature-v1";
@@ -817,6 +828,235 @@ pub struct VectorStoreManifestLookupV1 {
     pub audit_search_plan: VectorSearchPlanV1,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagIngestRequestV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    pub collection: String,
+    pub owner: String,
+    pub title: String,
+    #[serde(rename = "documentText")]
+    pub document_text: String,
+    #[serde(rename = "sourceRef", default, skip_serializing_if = "Option::is_none")]
+    pub source_ref: Option<String>,
+    #[serde(rename = "contentType", default = "default_text_content_type")]
+    pub content_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub metadata: Value,
+    #[serde(default = "default_document_sensitivity")]
+    pub sensitivity: DocumentSensitivityV1,
+    #[serde(rename = "accessPolicy", default)]
+    pub access_policy: VectorAccessPolicyV1,
+    #[serde(rename = "chunkingStrategy", default = "default_rag_chunking_strategy")]
+    pub chunking_strategy: ChunkingStrategyV1,
+    #[serde(
+        rename = "embeddingModelRef",
+        default = "default_rag_embedding_model_ref"
+    )]
+    pub embedding_model_ref: String,
+    #[serde(default = "default_rag_dimensions")]
+    pub dimensions: u32,
+    #[serde(default = "default_rag_metric")]
+    pub metric: VectorMetric,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagChunkRecordV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "chunkId")]
+    pub chunk_id: String,
+    #[serde(rename = "documentId")]
+    pub document_id: String,
+    #[serde(rename = "chunkSetId")]
+    pub chunk_set_id: String,
+    pub ordinal: u64,
+    pub text: String,
+    #[serde(rename = "textSha256")]
+    pub text_sha256: String,
+    #[serde(rename = "sourceRef")]
+    pub source_ref: String,
+    #[serde(rename = "startChar")]
+    pub start_char: u64,
+    #[serde(rename = "endChar")]
+    pub end_char: u64,
+    #[serde(rename = "tokenCount")]
+    pub token_count: u32,
+    #[serde(rename = "accessPolicy")]
+    pub access_policy: VectorAccessPolicyV1,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagEmbeddingRecordV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "embeddingId")]
+    pub embedding_id: String,
+    #[serde(rename = "chunkId")]
+    pub chunk_id: String,
+    #[serde(rename = "embeddingSetId")]
+    pub embedding_set_id: String,
+    #[serde(rename = "embeddingModelRef")]
+    pub embedding_model_ref: String,
+    pub dimensions: u32,
+    pub vector: Vec<f32>,
+    #[serde(rename = "vectorSha256")]
+    pub vector_sha256: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagIndexSnapshotV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "snapshotId")]
+    pub snapshot_id: String,
+    pub collection: DocumentCollectionManifestV1,
+    #[serde(rename = "chunkSet")]
+    pub chunk_set: ChunkSetManifestV1,
+    #[serde(rename = "embeddingSet")]
+    pub embedding_set: EmbeddingSetManifestV1,
+    #[serde(rename = "vectorIndex")]
+    pub vector_index: VectorIndexManifestV2,
+    #[serde(rename = "ragPipeline")]
+    pub rag_pipeline: RagPipelineManifestV2,
+    pub chunks: Vec<RagChunkRecordV1>,
+    pub embeddings: Vec<RagEmbeddingRecordV1>,
+    #[serde(rename = "sourceStorageRefs", default)]
+    pub source_storage_refs: Vec<KnowledgeAssetRefV1>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagIngestResultV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "snapshot")]
+    pub snapshot: RagIndexSnapshotV1,
+    pub verifications: Vec<KnowledgeAssetVerificationV1>,
+    pub warnings: Vec<ValidationIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagSearchRequestV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+    pub collection: String,
+    pub requester: String,
+    pub query: String,
+    #[serde(rename = "topK", default = "default_top_k")]
+    pub top_k: u32,
+    #[serde(rename = "privacyTier", default = "default_privacy_tier")]
+    pub privacy_tier: PrivacyTier,
+    #[serde(rename = "accessGrantRefs", default)]
+    pub access_grant_refs: Vec<String>,
+    #[serde(rename = "includeText", default)]
+    pub include_text: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagSearchHitV1 {
+    #[serde(rename = "chunkId")]
+    pub chunk_id: String,
+    #[serde(rename = "documentId")]
+    pub document_id: String,
+    pub title: String,
+    pub score: f64,
+    #[serde(rename = "sourceRef")]
+    pub source_ref: String,
+    #[serde(rename = "quoteHash")]
+    pub quote_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagSearchResultV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    pub request: RagSearchRequestV1,
+    #[serde(rename = "retrievalPlan")]
+    pub retrieval_plan: RetrievalPlanV1,
+    pub hits: Vec<RagSearchHitV1>,
+    #[serde(rename = "accessGranted")]
+    pub access_granted: bool,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagAskRequestV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+    pub collection: String,
+    pub requester: String,
+    pub query: String,
+    #[serde(rename = "topK", default = "default_top_k")]
+    pub top_k: u32,
+    #[serde(rename = "privacyTier", default = "default_privacy_tier")]
+    pub privacy_tier: PrivacyTier,
+    #[serde(rename = "accessGrantRefs", default)]
+    pub access_grant_refs: Vec<String>,
+    #[serde(rename = "receiptRequired", default)]
+    pub receipt_required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagAnswerReceiptV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "receiptId")]
+    pub receipt_id: String,
+    #[serde(rename = "queryId")]
+    pub query_id: String,
+    #[serde(rename = "collectionId")]
+    pub collection_id: String,
+    #[serde(rename = "answerSha256")]
+    pub answer_sha256: String,
+    #[serde(rename = "documentRefs")]
+    pub document_refs: Vec<String>,
+    #[serde(rename = "chunkRefs")]
+    pub chunk_refs: Vec<String>,
+    #[serde(rename = "retrievalPlanRef")]
+    pub retrieval_plan_ref: String,
+    #[serde(rename = "citationTraceRef")]
+    pub citation_trace_ref: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RagAnswerResultV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    pub request: RagAskRequestV1,
+    pub answer: String,
+    #[serde(rename = "searchResult")]
+    pub search_result: RagSearchResultV1,
+    #[serde(rename = "citationTrace")]
+    pub citation_trace: CitationTraceV1,
+    #[serde(
+        rename = "answerReceipt",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub answer_receipt: Option<RagAnswerReceiptV1>,
+    pub valid: bool,
+    pub issues: Vec<ValidationIssue>,
+    pub warnings: Vec<ValidationIssue>,
+}
+
 pub fn create_vector_store_manifest(options: VectorStoreInitOptionsV1) -> VectorStoreManifestV1 {
     let mut document_collection_refs = options.document_collection_refs;
     document_collection_refs.sort();
@@ -1204,6 +1444,703 @@ pub fn get_vector_store_manifest(
     }
 
     Ok(None)
+}
+
+pub fn rag_ingest_plain_text(request: RagIngestRequestV1) -> anyhow::Result<RagIngestResultV1> {
+    let mut issues = Vec::new();
+    if request.schema_version != RAG_INGEST_REQUEST_SCHEMA_VERSION {
+        issues.push(issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {RAG_INGEST_REQUEST_SCHEMA_VERSION}"),
+        ));
+    }
+    require_non_empty(&mut issues, "$.collection", &request.collection);
+    require_non_empty(&mut issues, "$.owner", &request.owner);
+    require_non_empty(&mut issues, "$.title", &request.title);
+    require_non_empty(
+        &mut issues,
+        "$.embeddingModelRef",
+        &request.embedding_model_ref,
+    );
+    if request.document_text.trim().is_empty() {
+        issues.push(issue("$.documentText", "documentText must not be empty"));
+    }
+    if request.dimensions == 0 {
+        issues.push(issue(
+            "$.dimensions",
+            "dimensions must be greater than zero",
+        ));
+    }
+    if request.chunking_strategy.target_tokens == 0 {
+        issues.push(issue(
+            "$.chunkingStrategy.targetTokens",
+            "targetTokens must be greater than zero",
+        ));
+    }
+    if request.chunking_strategy.overlap_tokens >= request.chunking_strategy.target_tokens {
+        issues.push(issue(
+            "$.chunkingStrategy.overlapTokens",
+            "overlapTokens must be smaller than targetTokens",
+        ));
+    }
+    if !rag_supports_text_content_type(&request.content_type) {
+        issues.push(issue(
+            "$.contentType",
+            "Swarm RAG One currently supports plain text and Markdown content types",
+        ));
+    }
+    if !issues.is_empty() {
+        anyhow::bail!("RAG ingest request is invalid: {}", issue_summary(&issues));
+    }
+
+    let created_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let document_bytes = request.document_text.as_bytes();
+    let document_sha256 = sha256_hex_bytes(document_bytes);
+    let source_ref = request
+        .source_ref
+        .clone()
+        .unwrap_or_else(|| format!("sha256://{document_sha256}"));
+    let source_storage_ref = KnowledgeAssetRefV1 {
+        role: KnowledgeRefRoleV1::Document,
+        reference: source_ref.clone(),
+        content_type: Some(request.content_type.clone()),
+        sha256: Some(document_sha256.clone()),
+        size_bytes: Some(document_bytes.len().try_into().unwrap_or(u64::MAX)),
+    };
+    let document_seed = json!({
+        "collection": &request.collection,
+        "owner": &request.owner,
+        "title": &request.title,
+        "sourceRef": &source_ref,
+        "sha256": &document_sha256,
+    });
+    let document_id = stable_id("document", &document_seed);
+    let document = DocumentAssetV1 {
+        document_id: document_id.clone(),
+        title: request.title.clone(),
+        source_ref: source_ref.clone(),
+        content_type: request.content_type.clone(),
+        sha256: Some(document_sha256),
+        size_bytes: Some(document_bytes.len().try_into().unwrap_or(u64::MAX)),
+        language: request.language.clone(),
+        metadata: request.metadata.clone(),
+        sensitivity: request.sensitivity.clone(),
+        license_ref: request.access_policy.license_ref.clone(),
+        created_at: created_at.clone(),
+    };
+
+    let mut collection = DocumentCollectionManifestV1 {
+        schema_version: DOCUMENT_COLLECTION_SCHEMA_VERSION.to_string(),
+        object_kind: "document_collection".to_string(),
+        collection_id: String::new(),
+        name: request.collection.clone(),
+        owner: request.owner.clone(),
+        summary: format!("Swarm RAG One collection for {}", request.title),
+        update_mode: DocumentCollectionUpdateModeV1::ImmutableSnapshot,
+        documents: vec![document],
+        metadata_schema: json!({ "type": "object" }),
+        access_policy: request.access_policy.clone(),
+        storage_refs: vec![source_storage_ref.clone()],
+        feed_ref: None,
+        created_at: created_at.clone(),
+        signature: None,
+    };
+    sign_document_collection_manifest(&mut collection);
+
+    let raw_chunks = chunk_document_text(
+        &request.document_text,
+        request.chunking_strategy.target_tokens,
+        request.chunking_strategy.overlap_tokens,
+    );
+    if raw_chunks.is_empty() {
+        anyhow::bail!("RAG ingest produced no chunks");
+    }
+
+    let mut chunks = raw_chunks
+        .into_iter()
+        .map(|raw| {
+            let text_sha256 = sha256_hex_bytes(raw.text.as_bytes());
+            let chunk_id = stable_id(
+                "chunk",
+                &json!({
+                    "documentId": &document_id,
+                    "ordinal": raw.ordinal,
+                    "textSha256": &text_sha256,
+                }),
+            );
+            RagChunkRecordV1 {
+                schema_version: RAG_CHUNK_RECORD_SCHEMA_VERSION.to_string(),
+                chunk_id,
+                document_id: document_id.clone(),
+                chunk_set_id: String::new(),
+                ordinal: raw.ordinal,
+                text: raw.text,
+                text_sha256,
+                source_ref: source_ref.clone(),
+                start_char: raw.start_char,
+                end_char: raw.end_char,
+                token_count: raw.token_count,
+                access_policy: request.access_policy.clone(),
+                created_at: created_at.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let chunk_refs = chunks
+        .iter()
+        .map(|chunk| KnowledgeAssetRefV1 {
+            role: KnowledgeRefRoleV1::ChunkSet,
+            reference: format!("sha256://{}", chunk.text_sha256),
+            content_type: Some("text/plain".to_string()),
+            sha256: Some(chunk.text_sha256.clone()),
+            size_bytes: Some(chunk.text.len().try_into().unwrap_or(u64::MAX)),
+        })
+        .collect::<Vec<_>>();
+    let mut chunk_set = ChunkSetManifestV1 {
+        schema_version: CHUNK_SET_SCHEMA_VERSION.to_string(),
+        object_kind: "chunk_set".to_string(),
+        chunk_set_id: String::new(),
+        collection_ref: format!("local://document-collections/{}", collection.collection_id),
+        collection_id: Some(collection.collection_id.clone()),
+        chunking_strategy: request.chunking_strategy.clone(),
+        chunk_count: chunks.len().try_into().unwrap_or(u64::MAX),
+        chunk_refs,
+        metadata_ref: Some(format!(
+            "local://rag/{}/chunks",
+            sanitize_path_id(&request.collection)
+        )),
+        created_at: created_at.clone(),
+        signature: None,
+    };
+    sign_chunk_set_manifest(&mut chunk_set);
+    for chunk in &mut chunks {
+        chunk.chunk_set_id = chunk_set.chunk_set_id.clone();
+    }
+
+    let mut embeddings = chunks
+        .iter()
+        .map(|chunk| {
+            let vector = deterministic_embedding_vector(
+                &chunk.text,
+                &request.embedding_model_ref,
+                request.dimensions,
+            );
+            let vector_sha256 = sha256_hex_bytes(&serde_json::to_vec(&vector).unwrap_or_default());
+            let embedding_id = stable_id(
+                "embedding",
+                &json!({
+                    "chunkId": &chunk.chunk_id,
+                    "embeddingModelRef": &request.embedding_model_ref,
+                    "vectorSha256": &vector_sha256,
+                }),
+            );
+            RagEmbeddingRecordV1 {
+                schema_version: RAG_EMBEDDING_RECORD_SCHEMA_VERSION.to_string(),
+                embedding_id,
+                chunk_id: chunk.chunk_id.clone(),
+                embedding_set_id: String::new(),
+                embedding_model_ref: request.embedding_model_ref.clone(),
+                dimensions: request.dimensions,
+                vector,
+                vector_sha256,
+                created_at: created_at.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let embedding_refs = embeddings
+        .iter()
+        .map(|embedding| KnowledgeAssetRefV1 {
+            role: KnowledgeRefRoleV1::EmbeddingSet,
+            reference: format!("sha256://{}", embedding.vector_sha256),
+            content_type: Some("application/json".to_string()),
+            sha256: Some(embedding.vector_sha256.clone()),
+            size_bytes: Some(
+                serde_json::to_vec(&embedding.vector)
+                    .unwrap_or_default()
+                    .len()
+                    .try_into()
+                    .unwrap_or(u64::MAX),
+            ),
+        })
+        .collect::<Vec<_>>();
+    let mut embedding_set = EmbeddingSetManifestV1 {
+        schema_version: EMBEDDING_SET_SCHEMA_VERSION.to_string(),
+        object_kind: "embedding_set".to_string(),
+        embedding_set_id: String::new(),
+        chunk_set_ref: format!("local://chunk-sets/{}", chunk_set.chunk_set_id),
+        embedding_model_ref: request.embedding_model_ref.clone(),
+        dimensions: request.dimensions,
+        metric: request.metric.clone(),
+        precision: EmbeddingVectorPrecisionV1::Float32,
+        vector_count: embeddings.len().try_into().unwrap_or(u64::MAX),
+        embedding_refs,
+        created_at: created_at.clone(),
+        signature: None,
+    };
+    sign_embedding_set_manifest(&mut embedding_set);
+    for embedding in &mut embeddings {
+        embedding.embedding_set_id = embedding_set.embedding_set_id.clone();
+    }
+
+    let mut vector_index = VectorIndexManifestV2 {
+        schema_version: VECTOR_INDEX_V2_SCHEMA_VERSION.to_string(),
+        object_kind: "vector_index".to_string(),
+        vector_index_id: String::new(),
+        name: format!("{} index", request.collection),
+        owner: request.owner.clone(),
+        embedding_set_ref: format!("local://embedding-sets/{}", embedding_set.embedding_set_id),
+        document_collection_refs: vec![format!(
+            "local://document-collections/{}",
+            collection.collection_id
+        )],
+        chunk_set_refs: vec![format!("local://chunk-sets/{}", chunk_set.chunk_set_id)],
+        embedding_model_ref: request.embedding_model_ref.clone(),
+        index_format: "swarm-rag-one-static-json".to_string(),
+        backend: VectorIndexBackendV2::SwarmStatic,
+        dimensions: request.dimensions,
+        metric: request.metric.clone(),
+        access_policy: request.access_policy.clone(),
+        storage_refs: vec![
+            source_storage_ref.clone(),
+            KnowledgeAssetRefV1 {
+                role: KnowledgeRefRoleV1::ChunkSet,
+                reference: format!("local://chunk-sets/{}", chunk_set.chunk_set_id),
+                content_type: Some("application/json".to_string()),
+                sha256: Some(sha256_json(&chunks)),
+                size_bytes: Some(serde_json_len(&chunks)),
+            },
+            KnowledgeAssetRefV1 {
+                role: KnowledgeRefRoleV1::EmbeddingSet,
+                reference: format!("local://embedding-sets/{}", embedding_set.embedding_set_id),
+                content_type: Some("application/json".to_string()),
+                sha256: Some(sha256_json(&embeddings)),
+                size_bytes: Some(serde_json_len(&embeddings)),
+            },
+        ],
+        refresh_policy: VectorIndexRefreshPolicyV2 {
+            update_mode: DocumentCollectionUpdateModeV1::ImmutableSnapshot,
+            source_feed_ref: None,
+            incremental_updates: false,
+        },
+        created_at: created_at.clone(),
+        signature: None,
+    };
+    sign_vector_index_manifest_v2(&mut vector_index);
+
+    let mut rag_pipeline = RagPipelineManifestV2 {
+        schema_version: RAG_PIPELINE_V2_SCHEMA_VERSION.to_string(),
+        object_kind: "rag_pipeline".to_string(),
+        pipeline_id: String::new(),
+        name: format!("{} RAG pipeline", request.collection),
+        owner: request.owner.clone(),
+        document_collection_refs: vec![format!(
+            "local://document-collections/{}",
+            collection.collection_id
+        )],
+        vector_index_refs: vec![vector_index.vector_index_id.clone()],
+        retriever_ref: "local://retrievers/swarm-rag-one-static-cosine".to_string(),
+        generator_package_ref: "local://generators/swarm-rag-one-extractive".to_string(),
+        citation_policy: CitationPolicyV1::Required,
+        answer_output_schema: json!({
+            "type": "object",
+            "required": ["answer", "citations"]
+        }),
+        access_policy: request.access_policy.clone(),
+        privacy_tier: request.access_policy.privacy_tier.clone(),
+        verification_tiers: vec![IntegrityTier::ReceiptOnly],
+        stages: vec![
+            RagPipelineStageV2 {
+                stage_id: "retrieve".to_string(),
+                stage_kind: RagPipelineStageKindV2::Retrieve,
+                input_refs: vec![vector_index.vector_index_id.clone()],
+                output_ref: Some("local://rag/search-hits".to_string()),
+                required: true,
+            },
+            RagPipelineStageV2 {
+                stage_id: "assemble-context".to_string(),
+                stage_kind: RagPipelineStageKindV2::AssembleContext,
+                input_refs: vec!["local://rag/search-hits".to_string()],
+                output_ref: Some("local://rag/context".to_string()),
+                required: true,
+            },
+            RagPipelineStageV2 {
+                stage_id: "generate-answer".to_string(),
+                stage_kind: RagPipelineStageKindV2::GenerateAnswer,
+                input_refs: vec!["local://rag/context".to_string()],
+                output_ref: Some("local://rag/answer".to_string()),
+                required: true,
+            },
+            RagPipelineStageV2 {
+                stage_id: "cite-sources".to_string(),
+                stage_kind: RagPipelineStageKindV2::CiteSources,
+                input_refs: vec!["local://rag/answer".to_string()],
+                output_ref: Some("local://rag/citation-trace".to_string()),
+                required: true,
+            },
+        ],
+        created_at: created_at.clone(),
+        signature: None,
+    };
+    sign_rag_pipeline_manifest_v2(&mut rag_pipeline);
+
+    let snapshot_id = stable_id(
+        "rag-snapshot",
+        &json!({
+            "collectionId": collection.collection_id,
+            "chunkSetId": chunk_set.chunk_set_id,
+            "embeddingSetId": embedding_set.embedding_set_id,
+            "vectorIndexId": vector_index.vector_index_id,
+            "pipelineId": rag_pipeline.pipeline_id,
+        }),
+    );
+    let snapshot = RagIndexSnapshotV1 {
+        schema_version: RAG_INDEX_SNAPSHOT_SCHEMA_VERSION.to_string(),
+        snapshot_id,
+        collection,
+        chunk_set,
+        embedding_set,
+        vector_index,
+        rag_pipeline,
+        chunks,
+        embeddings,
+        source_storage_refs: vec![source_storage_ref],
+        created_at,
+    };
+    let verifications = vec![
+        verify_document_collection_manifest(&snapshot.collection),
+        verify_chunk_set_manifest(&snapshot.chunk_set),
+        verify_embedding_set_manifest(&snapshot.embedding_set),
+        verify_vector_index_manifest_v2(&snapshot.vector_index),
+        verify_rag_pipeline_manifest_v2(&snapshot.rag_pipeline),
+    ];
+    let warnings = verifications
+        .iter()
+        .flat_map(|verification| verification.warnings.clone())
+        .collect();
+
+    Ok(RagIngestResultV1 {
+        schema_version: RAG_INGEST_RESULT_SCHEMA_VERSION.to_string(),
+        snapshot,
+        verifications,
+        warnings,
+    })
+}
+
+pub fn rag_search(snapshot: &RagIndexSnapshotV1, request: RagSearchRequestV1) -> RagSearchResultV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    if request.schema_version != RAG_SEARCH_REQUEST_SCHEMA_VERSION {
+        issues.push(issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {RAG_SEARCH_REQUEST_SCHEMA_VERSION}"),
+        ));
+    }
+    require_non_empty(&mut issues, "$.requestId", &request.request_id);
+    require_non_empty(&mut issues, "$.collection", &request.collection);
+    require_non_empty(&mut issues, "$.requester", &request.requester);
+    require_non_empty(&mut issues, "$.query", &request.query);
+    if request.top_k == 0 {
+        issues.push(issue("$.topK", "topK must be greater than zero"));
+    }
+    if request.collection != snapshot.collection.name
+        && request.collection != snapshot.collection.collection_id
+    {
+        issues.push(issue(
+            "$.collection",
+            "Search request collection must match the RAG snapshot collection name or id",
+        ));
+    }
+    if snapshot.schema_version != RAG_INDEX_SNAPSHOT_SCHEMA_VERSION {
+        issues.push(issue(
+            "$.snapshot.schemaVersion",
+            format!("Expected snapshot schemaVersion to be {RAG_INDEX_SNAPSHOT_SCHEMA_VERSION}"),
+        ));
+    }
+
+    let access_granted = access_policy_allows(
+        &snapshot.vector_index.access_policy,
+        &request.access_grant_refs,
+    );
+    if !access_granted {
+        issues.push(issue(
+            "$.accessGrantRefs",
+            "This collection requires an access grant before retrieval or citation",
+        ));
+    }
+
+    let retrieval_query = RetrievalQueryV1 {
+        schema_version: RETRIEVAL_QUERY_SCHEMA_VERSION.to_string(),
+        query_id: request.request_id.clone(),
+        requester: request.requester.clone(),
+        query: json!({ "text": request.query }),
+        top_k: request.top_k,
+        filters: json!({}),
+        privacy_tier: request.privacy_tier.clone(),
+        embedding_model_ref: Some(snapshot.vector_index.embedding_model_ref.clone()),
+        trace_required: true,
+    };
+    let retrieval_request = RetrievalPlanningRequestV1 {
+        schema_version: RETRIEVAL_PLANNING_REQUEST_SCHEMA_VERSION.to_string(),
+        query: retrieval_query,
+        vector_index: snapshot.vector_index.clone(),
+        rag_pipeline: Some(snapshot.rag_pipeline.clone()),
+    };
+    let retrieval_plan = retrieval_plan(&retrieval_request);
+    warnings.extend(retrieval_plan.warnings.clone());
+    issues.extend(
+        retrieval_plan
+            .issues
+            .iter()
+            .cloned()
+            .map(|issue| prefix_issue("$.retrievalPlan", issue)),
+    );
+
+    let hits = if issues.is_empty() {
+        let query_embedding = deterministic_embedding_vector(
+            &request.query,
+            &snapshot.vector_index.embedding_model_ref,
+            snapshot.vector_index.dimensions,
+        );
+        let mut scored = snapshot
+            .embeddings
+            .iter()
+            .filter_map(|embedding| {
+                let chunk = snapshot
+                    .chunks
+                    .iter()
+                    .find(|chunk| chunk.chunk_id == embedding.chunk_id)?;
+                if !access_policy_allows(&chunk.access_policy, &request.access_grant_refs) {
+                    return None;
+                }
+                Some((
+                    embedding,
+                    chunk,
+                    cosine_score(&query_embedding, &embedding.vector),
+                ))
+            })
+            .collect::<Vec<_>>();
+        scored.sort_by(|left, right| {
+            right
+                .2
+                .partial_cmp(&left.2)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(left.1.ordinal.cmp(&right.1.ordinal))
+        });
+        scored
+            .into_iter()
+            .take(request.top_k as usize)
+            .map(|(_embedding, chunk, score)| RagSearchHitV1 {
+                chunk_id: chunk.chunk_id.clone(),
+                document_id: chunk.document_id.clone(),
+                title: snapshot
+                    .collection
+                    .documents
+                    .iter()
+                    .find(|document| document.document_id == chunk.document_id)
+                    .map(|document| document.title.clone())
+                    .unwrap_or_else(|| snapshot.collection.name.clone()),
+                score,
+                source_ref: chunk.source_ref.clone(),
+                quote_hash: chunk.text_sha256.clone(),
+                text: if request.include_text {
+                    Some(chunk.text.clone())
+                } else {
+                    None
+                },
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let valid = issues.is_empty();
+    RagSearchResultV1 {
+        schema_version: RAG_SEARCH_RESULT_SCHEMA_VERSION.to_string(),
+        request,
+        retrieval_plan,
+        hits,
+        access_granted,
+        valid,
+        issues,
+        warnings,
+    }
+}
+
+pub fn rag_ask(snapshot: &RagIndexSnapshotV1, request: RagAskRequestV1) -> RagAnswerResultV1 {
+    let mut issues = Vec::new();
+    if request.schema_version != RAG_ASK_REQUEST_SCHEMA_VERSION {
+        issues.push(issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {RAG_ASK_REQUEST_SCHEMA_VERSION}"),
+        ));
+    }
+    require_non_empty(&mut issues, "$.requestId", &request.request_id);
+    require_non_empty(&mut issues, "$.query", &request.query);
+
+    let search_request = RagSearchRequestV1 {
+        schema_version: RAG_SEARCH_REQUEST_SCHEMA_VERSION.to_string(),
+        request_id: request.request_id.clone(),
+        collection: request.collection.clone(),
+        requester: request.requester.clone(),
+        query: request.query.clone(),
+        top_k: request.top_k,
+        privacy_tier: request.privacy_tier.clone(),
+        access_grant_refs: request.access_grant_refs.clone(),
+        include_text: true,
+    };
+    let search_result = rag_search(snapshot, search_request);
+    issues.extend(
+        search_result
+            .issues
+            .iter()
+            .cloned()
+            .map(|issue| prefix_issue("$.searchResult", issue)),
+    );
+
+    let answer = if search_result.hits.is_empty() {
+        "No accessible chunks matched the question.".to_string()
+    } else {
+        let mut excerpts = Vec::new();
+        for hit in &search_result.hits {
+            if let Some(text) = hit.text.as_deref() {
+                excerpts.push(format!("{}: {}", hit.title, compact_excerpt(text, 280)));
+            }
+        }
+        format!(
+            "Based on {} retrieved chunk(s), {}",
+            search_result.hits.len(),
+            excerpts.join(" ")
+        )
+    };
+    let answer_sha256 = sha256_hex_bytes(answer.as_bytes());
+    let answer_ref = format!("sha256://{answer_sha256}");
+    let output_end = answer.chars().count().try_into().unwrap_or(u32::MAX);
+    let citations = search_result
+        .hits
+        .iter()
+        .map(|hit| CitationSpanV1 {
+            output_start: 0,
+            output_end: output_end.max(1),
+            source_ref: hit.source_ref.clone(),
+            document_id: Some(hit.document_id.clone()),
+            chunk_id: Some(hit.chunk_id.clone()),
+            quote_hash: Some(hit.quote_hash.clone()),
+            score: Some(hit.score),
+            visibility: if search_result.access_granted {
+                CitationVisibilityV1::Public
+            } else {
+                CitationVisibilityV1::HashOnly
+            },
+        })
+        .collect::<Vec<_>>();
+    let mut citation_trace = CitationTraceV1 {
+        schema_version: CITATION_TRACE_SCHEMA_VERSION.to_string(),
+        object_kind: "citation_trace".to_string(),
+        trace_id: String::new(),
+        query_id: request.request_id.clone(),
+        answer_ref,
+        retrieval_plan_ref: Some(format!(
+            "local://retrieval-plans/{}",
+            search_result.retrieval_plan.plan_id
+        )),
+        pipeline_ref: Some(format!(
+            "local://rag-pipelines/{}",
+            snapshot.rag_pipeline.pipeline_id
+        )),
+        citations,
+        policy_warnings: search_result
+            .warnings
+            .iter()
+            .map(|warning| warning.message.clone())
+            .collect(),
+        created_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        signature: None,
+    };
+    if !citation_trace.citations.is_empty() {
+        sign_citation_trace(&mut citation_trace);
+        let citation_verification = verify_citation_trace(&citation_trace);
+        issues.extend(citation_verification.issues);
+    }
+
+    let answer_receipt = if request.receipt_required && issues.is_empty() {
+        let mut document_refs = search_result
+            .hits
+            .iter()
+            .map(|hit| hit.source_ref.clone())
+            .collect::<Vec<_>>();
+        document_refs.sort();
+        document_refs.dedup();
+        let chunk_refs = search_result
+            .hits
+            .iter()
+            .map(|hit| format!("local://rag/chunks/{}", hit.chunk_id))
+            .collect::<Vec<_>>();
+        let receipt_seed = json!({
+            "queryId": &request.request_id,
+            "answerSha256": &answer_sha256,
+            "chunkRefs": &chunk_refs,
+            "citationTraceId": &citation_trace.trace_id,
+        });
+        Some(RagAnswerReceiptV1 {
+            schema_version: RAG_ANSWER_RECEIPT_SCHEMA_VERSION.to_string(),
+            receipt_id: stable_id("rag-answer-receipt", &receipt_seed),
+            query_id: request.request_id.clone(),
+            collection_id: snapshot.collection.collection_id.clone(),
+            answer_sha256,
+            document_refs,
+            chunk_refs,
+            retrieval_plan_ref: format!(
+                "local://retrieval-plans/{}",
+                search_result.retrieval_plan.plan_id
+            ),
+            citation_trace_ref: format!("local://citation-traces/{}", citation_trace.trace_id),
+            created_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        })
+    } else {
+        None
+    };
+    let valid = issues.is_empty() && search_result.valid;
+
+    RagAnswerResultV1 {
+        schema_version: RAG_ANSWER_RESULT_SCHEMA_VERSION.to_string(),
+        request,
+        answer,
+        search_result,
+        citation_trace,
+        answer_receipt,
+        valid,
+        issues,
+        warnings: Vec::new(),
+    }
+}
+
+pub fn rag_snapshot_path(vector_dir: &Path, collection: &str) -> PathBuf {
+    vector_dir
+        .join("rag")
+        .join(format!("{}.rag.json", sanitize_path_id(collection)))
+}
+
+pub fn write_rag_index_snapshot(
+    vector_dir: &Path,
+    collection: &str,
+    snapshot: &RagIndexSnapshotV1,
+) -> anyhow::Result<PathBuf> {
+    let path = rag_snapshot_path(vector_dir, collection);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    fs::write(&path, serde_json::to_vec_pretty(snapshot)?)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(path)
+}
+
+pub fn read_rag_index_snapshot(
+    vector_dir: &Path,
+    collection: &str,
+) -> anyhow::Result<RagIndexSnapshotV1> {
+    let path = rag_snapshot_path(vector_dir, collection);
+    let bytes = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    serde_json::from_slice(&bytes).with_context(|| format!("failed to parse {}", path.display()))
 }
 
 pub fn sign_document_collection_manifest(manifest: &mut DocumentCollectionManifestV1) {
@@ -2319,6 +3256,242 @@ fn prefix_issue(prefix: &str, issue: ValidationIssue) -> ValidationIssue {
     }
 }
 
+#[derive(Debug, Clone)]
+struct RawTextChunk {
+    ordinal: u64,
+    text: String,
+    start_char: u64,
+    end_char: u64,
+    token_count: u32,
+}
+
+fn default_text_content_type() -> String {
+    "text/plain".to_string()
+}
+
+fn default_document_sensitivity() -> DocumentSensitivityV1 {
+    DocumentSensitivityV1::Public
+}
+
+fn default_rag_chunking_strategy() -> ChunkingStrategyV1 {
+    ChunkingStrategyV1 {
+        strategy_kind: ChunkingStrategyKindV1::FixedTokens,
+        target_tokens: 160,
+        overlap_tokens: 24,
+        separators: vec!["\n\n".to_string(), "\n".to_string(), " ".to_string()],
+        tokenizer_ref: Some("local://tokenizers/whitespace".to_string()),
+    }
+}
+
+fn default_rag_embedding_model_ref() -> String {
+    "local://embeddings/mock-deterministic-v1".to_string()
+}
+
+fn default_rag_dimensions() -> u32 {
+    64
+}
+
+fn default_rag_metric() -> VectorMetric {
+    VectorMetric::Cosine
+}
+
+fn default_top_k() -> u32 {
+    5
+}
+
+fn default_privacy_tier() -> PrivacyTier {
+    PrivacyTier::Standard
+}
+
+fn rag_supports_text_content_type(content_type: &str) -> bool {
+    matches!(
+        content_type.trim().to_ascii_lowercase().as_str(),
+        "text/plain" | "text/markdown" | "text/x-markdown" | "application/markdown"
+    )
+}
+
+fn access_policy_allows(policy: &VectorAccessPolicyV1, access_grant_refs: &[String]) -> bool {
+    if !policy.access_grant_required && matches!(policy.visibility, VectorAccessVisibility::Public)
+    {
+        return true;
+    }
+    if policy.access_grant_required {
+        return access_grant_refs
+            .iter()
+            .any(|reference| !reference.trim().is_empty());
+    }
+    !matches!(
+        policy.visibility,
+        VectorAccessVisibility::Private
+            | VectorAccessVisibility::Organization
+            | VectorAccessVisibility::TokenGated
+    )
+}
+
+fn sha256_hex_bytes(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn sha256_json(value: &impl Serialize) -> String {
+    sha256_hex_bytes(&serde_json::to_vec(value).unwrap_or_default())
+}
+
+fn serde_json_len(value: &impl Serialize) -> u64 {
+    serde_json::to_vec(value)
+        .unwrap_or_default()
+        .len()
+        .try_into()
+        .unwrap_or(u64::MAX)
+}
+
+fn issue_summary(issues: &[ValidationIssue]) -> String {
+    issues
+        .iter()
+        .map(|issue| format!("{}: {}", issue.path, issue.message))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn chunk_document_text(text: &str, target_tokens: u32, overlap_tokens: u32) -> Vec<RawTextChunk> {
+    let tokens = token_spans(text);
+    if tokens.is_empty() || target_tokens == 0 || overlap_tokens >= target_tokens {
+        return Vec::new();
+    }
+    let target = target_tokens as usize;
+    let overlap = overlap_tokens as usize;
+    let step = target.saturating_sub(overlap).max(1);
+    let mut chunks = Vec::new();
+    let mut start = 0usize;
+    let mut ordinal = 0u64;
+    while start < tokens.len() {
+        let end = (start + target).min(tokens.len());
+        let byte_start = tokens[start].1;
+        let byte_end = tokens[end - 1].2;
+        let chunk_text = text[byte_start..byte_end].trim().to_string();
+        if !chunk_text.is_empty() {
+            chunks.push(RawTextChunk {
+                ordinal,
+                text: chunk_text,
+                start_char: text[..byte_start]
+                    .chars()
+                    .count()
+                    .try_into()
+                    .unwrap_or(u64::MAX),
+                end_char: text[..byte_end]
+                    .chars()
+                    .count()
+                    .try_into()
+                    .unwrap_or(u64::MAX),
+                token_count: (end - start).try_into().unwrap_or(u32::MAX),
+            });
+            ordinal += 1;
+        }
+        if end == tokens.len() {
+            break;
+        }
+        start += step;
+    }
+    chunks
+}
+
+fn token_spans(text: &str) -> Vec<(&str, usize, usize)> {
+    let mut spans = Vec::new();
+    let mut token_start: Option<usize> = None;
+    for (index, character) in text.char_indices() {
+        if character.is_whitespace() {
+            if let Some(start) = token_start.take() {
+                spans.push((&text[start..index], start, index));
+            }
+        } else if token_start.is_none() {
+            token_start = Some(index);
+        }
+    }
+    if let Some(start) = token_start {
+        spans.push((&text[start..], start, text.len()));
+    }
+    spans
+}
+
+fn deterministic_embedding_vector(text: &str, model_ref: &str, dimensions: u32) -> Vec<f32> {
+    let dimensions = dimensions.max(1) as usize;
+    let mut vector = Vec::with_capacity(dimensions);
+    for index in 0..dimensions {
+        let mut hasher = Sha256::new();
+        hasher.update(model_ref.as_bytes());
+        hasher.update([0]);
+        hasher.update(text.as_bytes());
+        hasher.update([0]);
+        hasher.update(index.to_le_bytes());
+        let digest = hasher.finalize();
+        let value = u32::from_le_bytes([digest[0], digest[1], digest[2], digest[3]]);
+        let scaled = (value as f64 / u32::MAX as f64) * 2.0 - 1.0;
+        vector.push(scaled as f32);
+    }
+    let norm = vector
+        .iter()
+        .map(|value| (*value as f64) * (*value as f64))
+        .sum::<f64>()
+        .sqrt();
+    if norm > 0.0 {
+        for value in &mut vector {
+            *value = (*value as f64 / norm) as f32;
+        }
+    }
+    vector
+}
+
+fn cosine_score(left: &[f32], right: &[f32]) -> f64 {
+    let len = left.len().min(right.len());
+    if len == 0 {
+        return 0.0;
+    }
+    let mut dot = 0.0;
+    let mut left_norm = 0.0;
+    let mut right_norm = 0.0;
+    for index in 0..len {
+        let left_value = left[index] as f64;
+        let right_value = right[index] as f64;
+        dot += left_value * right_value;
+        left_norm += left_value * left_value;
+        right_norm += right_value * right_value;
+    }
+    if left_norm == 0.0 || right_norm == 0.0 {
+        return 0.0;
+    }
+    ((dot / left_norm.sqrt() / right_norm.sqrt()) + 1.0) / 2.0
+}
+
+fn compact_excerpt(text: &str, max_chars: usize) -> String {
+    let mut excerpt = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if excerpt.chars().count() > max_chars {
+        excerpt = excerpt.chars().take(max_chars).collect::<String>();
+        excerpt.push_str("...");
+    }
+    excerpt
+}
+
+fn sanitize_path_id(value: &str) -> String {
+    let mut sanitized = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    while sanitized.contains("--") {
+        sanitized = sanitized.replace("--", "-");
+    }
+    let sanitized = sanitized.trim_matches('-').to_string();
+    if sanitized.is_empty() {
+        "default".to_string()
+    } else {
+        sanitized
+    }
+}
+
 fn validate_retrieval_query(query: &RetrievalQueryV1, issues: &mut Vec<ValidationIssue>) {
     if query.schema_version != RETRIEVAL_QUERY_SCHEMA_VERSION {
         issues.push(issue(
@@ -2930,6 +4103,128 @@ mod tests {
     }
 
     #[test]
+    fn rag_one_ingests_searches_and_cites_plain_text() {
+        let ingest = rag_ingest_plain_text(rag_ingest_request(
+            "local/test",
+            "Swarm stores documents, chunks, embeddings, vector indexes, citations, and receipts. Hivemind uses those references to make RAG flows replayable.",
+            VectorAccessPolicyV1::default(),
+        ))
+        .unwrap();
+
+        assert_eq!(ingest.schema_version, RAG_INGEST_RESULT_SCHEMA_VERSION);
+        assert!(
+            ingest
+                .verifications
+                .iter()
+                .all(|verification| verification.valid)
+        );
+        assert_eq!(ingest.snapshot.chunks.len(), 1);
+        assert_eq!(ingest.snapshot.embeddings.len(), 1);
+
+        let search = rag_search(
+            &ingest.snapshot,
+            RagSearchRequestV1 {
+                schema_version: RAG_SEARCH_REQUEST_SCHEMA_VERSION.to_string(),
+                request_id: "rag-search-test-1".to_string(),
+                collection: "local/test".to_string(),
+                requester: "tester".to_string(),
+                query: "What does Swarm store for RAG?".to_string(),
+                top_k: 3,
+                privacy_tier: PrivacyTier::Standard,
+                access_grant_refs: vec![],
+                include_text: true,
+            },
+        );
+
+        assert!(search.valid, "{search:#?}");
+        assert!(search.access_granted);
+        assert_eq!(search.hits.len(), 1);
+        assert!(
+            search.hits[0]
+                .text
+                .as_deref()
+                .unwrap()
+                .contains("citations")
+        );
+
+        let answer = rag_ask(
+            &ingest.snapshot,
+            RagAskRequestV1 {
+                schema_version: RAG_ASK_REQUEST_SCHEMA_VERSION.to_string(),
+                request_id: "rag-ask-test-1".to_string(),
+                collection: "local/test".to_string(),
+                requester: "tester".to_string(),
+                query: "What can be audited?".to_string(),
+                top_k: 3,
+                privacy_tier: PrivacyTier::Standard,
+                access_grant_refs: vec![],
+                receipt_required: true,
+            },
+        );
+
+        assert!(answer.valid, "{answer:#?}");
+        assert!(answer.answer.contains("retrieved chunk"));
+        assert_eq!(answer.citation_trace.citations.len(), 1);
+        assert!(verify_citation_trace(&answer.citation_trace).valid);
+        assert!(answer.answer_receipt.is_some());
+        assert_eq!(answer.answer_receipt.as_ref().unwrap().chunk_refs.len(), 1);
+    }
+
+    #[test]
+    fn rag_one_rejects_private_search_without_access_grant() {
+        let private_policy = VectorAccessPolicyV1 {
+            visibility: VectorAccessVisibility::Private,
+            privacy_tier: PrivacyTier::LocalOnly,
+            access_grant_required: true,
+            license_ref: Some("local://licenses/private".to_string()),
+            redaction_policy_ref: None,
+        };
+        let ingest = rag_ingest_plain_text(rag_ingest_request(
+            "private/test",
+            "Private board minutes discuss a confidential GPU procurement plan.",
+            private_policy,
+        ))
+        .unwrap();
+
+        let denied = rag_search(
+            &ingest.snapshot,
+            RagSearchRequestV1 {
+                schema_version: RAG_SEARCH_REQUEST_SCHEMA_VERSION.to_string(),
+                request_id: "rag-search-private-denied".to_string(),
+                collection: "private/test".to_string(),
+                requester: "tester".to_string(),
+                query: "GPU procurement".to_string(),
+                top_k: 2,
+                privacy_tier: PrivacyTier::LocalOnly,
+                access_grant_refs: vec![],
+                include_text: true,
+            },
+        );
+
+        assert!(!denied.valid);
+        assert!(!denied.access_granted);
+        assert!(denied.hits.is_empty());
+        assert!(
+            denied
+                .issues
+                .iter()
+                .any(|issue| issue.path == "$.accessGrantRefs")
+        );
+
+        let allowed = rag_search(
+            &ingest.snapshot,
+            RagSearchRequestV1 {
+                access_grant_refs: vec!["local://access-grants/grant-1".to_string()],
+                ..denied.request
+            },
+        );
+
+        assert!(allowed.valid, "{allowed:#?}");
+        assert!(allowed.access_granted);
+        assert_eq!(allowed.hits.len(), 1);
+    }
+
+    #[test]
     fn retrieval_plan_rejects_embedding_model_mismatch_and_local_only_remote_index() {
         let mut index = vector_index_v2_from_vector_store(&manifest());
         index.backend = VectorIndexBackendV2::RemoteService;
@@ -3029,5 +4324,35 @@ mod tests {
             ],
             access_policy: None,
         })
+    }
+
+    fn rag_ingest_request(
+        collection: &str,
+        document_text: &str,
+        access_policy: VectorAccessPolicyV1,
+    ) -> RagIngestRequestV1 {
+        RagIngestRequestV1 {
+            schema_version: RAG_INGEST_REQUEST_SCHEMA_VERSION.to_string(),
+            collection: collection.to_string(),
+            owner: "0xVectorOwner".to_string(),
+            title: "Test Document".to_string(),
+            document_text: document_text.to_string(),
+            source_ref: Some("bzz://local-bytes-test-document".to_string()),
+            content_type: "text/plain".to_string(),
+            language: Some("en".to_string()),
+            metadata: json!({ "fixture": true }),
+            sensitivity: DocumentSensitivityV1::Public,
+            access_policy,
+            chunking_strategy: ChunkingStrategyV1 {
+                strategy_kind: ChunkingStrategyKindV1::FixedTokens,
+                target_tokens: 64,
+                overlap_tokens: 0,
+                separators: vec![" ".to_string()],
+                tokenizer_ref: Some("local://tokenizers/whitespace".to_string()),
+            },
+            embedding_model_ref: "local://embeddings/test".to_string(),
+            dimensions: 16,
+            metric: VectorMetric::Cosine,
+        }
     }
 }

@@ -1143,6 +1143,9 @@ fn router(state: AppState, static_dir: PathBuf) -> Router {
             "/v1/vector/stores/{vector_store_id}",
             get(vector_store_by_id),
         )
+        .route("/v1/rag/ingest", post(rag_ingest))
+        .route("/v1/rag/search", post(rag_search))
+        .route("/v1/rag/ask", post(rag_ask))
         .route("/v1/workflows/verify-tool", post(workflow_verify_tool))
         .route(
             "/v1/workflows/verify-workflow",
@@ -1273,6 +1276,7 @@ fn router(state: AppState, static_dir: PathBuf) -> Router {
             get(operational_snapshot),
         )
         .route("/v1/swarm-ai/execute", post(execute))
+        .route("/v1/swarm-ai/local-model-runner", get(local_model_runner))
         .route("/v1/swarm-ai/ai/plan", post(hivemind_ai_plan))
         .route("/v1/swarm-ai/ai/workload", post(hivemind_ai_workload))
         .route(
@@ -1623,6 +1627,7 @@ fn router(state: AppState, static_dir: PathBuf) -> Router {
             post(hivemind_policy_evaluate),
         )
         .route("/v1/hivemind/packages", get(hivemind_packages))
+        .route("/v1/hivemind/local-model-runner", get(local_model_runner))
         .route("/v1/hivemind/runners/v2", get(hivemind_runners_v2))
         .route("/v1/hivemind/runners", get(hivemind_runners))
         .route("/v1/hivemind/route-traces", get(route_traces))
@@ -4734,6 +4739,103 @@ async fn vector_store_by_id(
     }
 }
 
+async fn rag_ingest(
+    State(state): State<AppState>,
+    Json(mut request): Json<hivemind_vector::RagIngestRequestV1>,
+) -> impl IntoResponse {
+    let storage_upload = if request.source_ref.is_none() {
+        let mut storage = hivemind_storage::LocalDirectoryStorageProvider::new(&*state.storage_dir);
+        match storage.upload_bytes(request.document_text.as_bytes().to_vec()) {
+            Ok(upload) => {
+                request.source_ref = Some(upload.reference.clone());
+                Some(upload)
+            }
+            Err(error) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json_error(ErrorCode::ExecutionFailed, &error.message)),
+                )
+                    .into_response();
+            }
+        }
+    } else {
+        None
+    };
+    let collection = request.collection.clone();
+    match hivemind_vector::rag_ingest_plain_text(request) {
+        Ok(ingest) => match hivemind_vector::write_rag_index_snapshot(
+            &state.vector_dir,
+            &collection,
+            &ingest.snapshot,
+        ) {
+            Ok(path) => (
+                StatusCode::OK,
+                Json(json!({
+                    "snapshotPath": path.display().to_string(),
+                    "storageUpload": storage_upload,
+                    "ingest": ingest,
+                })),
+            )
+                .into_response(),
+            Err(error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json_error(
+                    ErrorCode::ExecutionFailed,
+                    &format!("Failed to persist RAG snapshot: {error}"),
+                )),
+            )
+                .into_response(),
+        },
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(json_error(ErrorCode::InvalidRequest, &error.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+async fn rag_search(
+    State(state): State<AppState>,
+    Json(request): Json<hivemind_vector::RagSearchRequestV1>,
+) -> impl IntoResponse {
+    match hivemind_vector::read_rag_index_snapshot(&state.vector_dir, &request.collection) {
+        Ok(snapshot) => (
+            StatusCode::OK,
+            Json(json!(hivemind_vector::rag_search(&snapshot, request))),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::NOT_FOUND,
+            Json(json_error(
+                ErrorCode::PackageNotFound,
+                &format!("RAG collection was not found: {error}"),
+            )),
+        )
+            .into_response(),
+    }
+}
+
+async fn rag_ask(
+    State(state): State<AppState>,
+    Json(request): Json<hivemind_vector::RagAskRequestV1>,
+) -> impl IntoResponse {
+    match hivemind_vector::read_rag_index_snapshot(&state.vector_dir, &request.collection) {
+        Ok(snapshot) => (
+            StatusCode::OK,
+            Json(json!(hivemind_vector::rag_ask(&snapshot, request))),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::NOT_FOUND,
+            Json(json_error(
+                ErrorCode::PackageNotFound,
+                &format!("RAG collection was not found: {error}"),
+            )),
+        )
+            .into_response(),
+    }
+}
+
 async fn workflow_verify_tool(
     Json(tool): Json<hivemind_workflow::ToolManifestV1>,
 ) -> Json<hivemind_workflow::ToolManifestVerificationV1> {
@@ -5267,6 +5369,10 @@ async fn capabilities() -> Json<hivemind_core::RunnerCapabilityV1> {
     Json(hivemind_core::runner_capability_from_descriptor(
         &hivemind_local_runner::descriptor(),
     ))
+}
+
+async fn local_model_runner() -> Json<hivemind_local_runner::LocalModelRunnerDescriptorV1> {
+    Json(hivemind_local_runner::configured_local_model_runner_descriptor())
 }
 
 async fn local_runner_cache(State(state): State<AppState>) -> impl IntoResponse {

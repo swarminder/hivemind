@@ -52,15 +52,27 @@ pub const PAYMENT_AUTHORIZATION_SCHEMA_VERSION: &str = "hivemind.payment_authori
 pub const LEGACY_PAYMENT_AUTHORIZATION_SCHEMA_VERSION: &str = "swarm-ai.payment-authorization.v1";
 pub const PAYMENT_AUTHORIZATION_VERIFICATION_SCHEMA_VERSION: &str =
     "hivemind.payment_authorization_verification.v1";
+pub const PAYMENT_AUTHORIZATION_V2_SCHEMA_VERSION: &str = "hivemind.payment_authorization.v2";
+pub const PAYMENT_AUTHORIZATION_V2_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.payment_authorization_verification.v2";
 pub const ESCROW_RECORD_SCHEMA_VERSION: &str = "hivemind.escrow_record.v1";
 pub const ESCROW_RECORD_VERIFICATION_SCHEMA_VERSION: &str =
     "hivemind.escrow_record_verification.v1";
+pub const ESCROW_RECORD_V2_SCHEMA_VERSION: &str = "hivemind.escrow_record.v2";
+pub const ESCROW_RECORD_V2_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.escrow_record_verification.v2";
 pub const ESCROW_RELEASE_REQUEST_SCHEMA_VERSION: &str = "hivemind.escrow_release_request.v1";
 pub const ESCROW_RELEASE_RESULT_SCHEMA_VERSION: &str = "hivemind.escrow_release_result.v1";
 pub const SETTLEMENT_EVENT_SCHEMA_VERSION: &str = "hivemind.settlement_event.v1";
 pub const LEGACY_SETTLEMENT_EVENT_SCHEMA_VERSION: &str = "swarm-ai.settlement-event.v1";
 pub const SETTLEMENT_EVENT_VERIFICATION_SCHEMA_VERSION: &str =
     "hivemind.settlement_event_verification.v1";
+pub const SETTLEMENT_RECORD_V2_SCHEMA_VERSION: &str = "hivemind.settlement_record.v2";
+pub const SETTLEMENT_RECORD_V2_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.settlement_record_verification.v2";
+pub const DISPUTE_RECORD_V2_SCHEMA_VERSION: &str = "hivemind.dispute_record.v2";
+pub const DISPUTE_RECORD_V2_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.dispute_record_verification.v2";
 pub const REFUND_RECORD_SCHEMA_VERSION: &str = "hivemind.refund_record.v1";
 pub const REFUND_RECORD_VERIFICATION_SCHEMA_VERSION: &str =
     "hivemind.refund_record_verification.v1";
@@ -71,6 +83,12 @@ pub const SLASHING_RECORD_VERIFICATION_SCHEMA_VERSION: &str =
     "hivemind.slashing_record_verification.v1";
 pub const SLASHING_BUILD_REQUEST_SCHEMA_VERSION: &str = "hivemind.slashing_build_request.v1";
 pub const SLASHING_BUILD_RESULT_SCHEMA_VERSION: &str = "hivemind.slashing_build_result.v1";
+pub const MARKETPLACE_AUDIT_EVENT_SCHEMA_VERSION: &str = "hivemind.marketplace_audit_event.v1";
+pub const MARKETPLACE_AUDIT_EVENT_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.marketplace_audit_event_verification.v1";
+pub const SLASHING_DECISION_SCHEMA_VERSION: &str = "hivemind.slashing_decision.v1";
+pub const SLASHING_DECISION_VERIFICATION_SCHEMA_VERSION: &str =
+    "hivemind.slashing_decision_verification.v1";
 const DEV_SERVICE_QUOTE_SIGNATURE_PREFIX: &str = "dev-service-quote-signature-v1";
 const DEV_MARKETPLACE_LISTING_SIGNATURE_PREFIX: &str = "dev-marketplace-listing-signature-v1";
 const DEV_MARKETPLACE_LISTING_V2_SIGNATURE_PREFIX: &str = "dev-marketplace-listing-signature-v2";
@@ -80,6 +98,14 @@ const DEV_PAYMENT_SIGNATURE_PREFIX: &str = "dev-signature-v1";
 const DEV_ESCROW_RECORD_SIGNATURE_PREFIX: &str = "dev-escrow-record-signature-v1";
 const DEV_REFUND_RECORD_SIGNATURE_PREFIX: &str = "dev-refund-record-signature-v1";
 const DEV_SLASHING_RECORD_SIGNATURE_PREFIX: &str = "dev-slashing-record-signature-v1";
+const DEV_PAYMENT_AUTHORIZATION_V2_SIGNATURE_PREFIX: &str =
+    "dev-payment-authorization-signature-v2";
+const DEV_ESCROW_RECORD_V2_SIGNATURE_PREFIX: &str = "dev-escrow-record-signature-v2";
+const DEV_SETTLEMENT_RECORD_V2_SIGNATURE_PREFIX: &str = "dev-settlement-record-signature-v2";
+const DEV_DISPUTE_RECORD_V2_SIGNATURE_PREFIX: &str = "dev-dispute-record-signature-v2";
+const DEV_MARKETPLACE_AUDIT_EVENT_SIGNATURE_PREFIX: &str =
+    "dev-marketplace-audit-event-signature-v1";
+const DEV_SLASHING_DECISION_SIGNATURE_PREFIX: &str = "dev-slashing-decision-signature-v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -1967,6 +1993,1348 @@ pub struct SlashingBuildResultV1 {
     pub dispute_verification: DisputeEvidenceVerificationV1,
     #[serde(rename = "correctnessAssessmentAccepted")]
     pub correctness_assessment_accepted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum PaymentRailV2 {
+    LocalDev,
+    External,
+    Blockchain,
+    Free,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PaymentAuthorizationV2 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "authorizationId")]
+    pub authorization_id: String,
+    #[serde(rename = "payerId")]
+    pub payer_id: String,
+    #[serde(rename = "payeeId", default, skip_serializing_if = "Option::is_none")]
+    pub payee_id: Option<String>,
+    #[serde(rename = "escrowId", default, skip_serializing_if = "Option::is_none")]
+    pub escrow_id: Option<String>,
+    #[serde(rename = "jobId", default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
+    #[serde(rename = "listingId", default, skip_serializing_if = "Option::is_none")]
+    pub listing_id: Option<String>,
+    pub amount: f64,
+    pub currency: String,
+    #[serde(rename = "maxAmount", default, skip_serializing_if = "Option::is_none")]
+    pub max_amount: Option<f64>,
+    pub expiry: String,
+    #[serde(rename = "paymentRail")]
+    pub payment_rail: PaymentRailV2,
+    #[serde(rename = "chainId", default, skip_serializing_if = "Option::is_none")]
+    pub chain_id: Option<String>,
+    pub nonce: String,
+    #[serde(rename = "policyRef")]
+    pub policy_ref: String,
+    #[serde(rename = "evidenceRefs", default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(
+        rename = "sourceAuthorizationId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_authorization_id: Option<String>,
+    #[serde(rename = "projectionWarnings", default)]
+    pub projection_warnings: Vec<String>,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PaymentAuthorizationV2VerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "authorizationId")]
+    pub authorization_id: String,
+    pub valid: bool,
+    pub issues: Vec<MarketplaceVerificationIssueV1>,
+    pub warnings: Vec<MarketplaceVerificationIssueV1>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EscrowRecordV2 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "escrowId")]
+    pub escrow_id: String,
+    #[serde(rename = "authorizationId")]
+    pub authorization_id: String,
+    #[serde(rename = "payerId")]
+    pub payer_id: String,
+    #[serde(rename = "intendedPayeeId")]
+    pub intended_payee_id: String,
+    #[serde(rename = "amountLocked")]
+    pub amount_locked: f64,
+    pub currency: String,
+    #[serde(rename = "releaseConditions")]
+    pub release_conditions: Value,
+    #[serde(rename = "refundConditions")]
+    pub refund_conditions: Value,
+    #[serde(rename = "disputeWindow")]
+    pub dispute_window: String,
+    #[serde(rename = "evidenceRefs")]
+    pub evidence_refs: Vec<String>,
+    pub status: EscrowStatusV1,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: String,
+    #[serde(
+        rename = "sourceEscrowId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_escrow_id: Option<String>,
+    #[serde(rename = "projectionWarnings", default)]
+    pub projection_warnings: Vec<String>,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EscrowRecordV2VerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "escrowId")]
+    pub escrow_id: String,
+    pub valid: bool,
+    pub issues: Vec<MarketplaceVerificationIssueV1>,
+    pub warnings: Vec<MarketplaceVerificationIssueV1>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplacePenaltyV1 {
+    #[serde(rename = "subjectId")]
+    pub subject_id: String,
+    pub amount: f64,
+    pub currency: String,
+    pub reason: String,
+    #[serde(rename = "evidenceRefs", default)]
+    pub evidence_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SettlementRecordV2 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "settlementId")]
+    pub settlement_id: String,
+    #[serde(rename = "escrowId", default, skip_serializing_if = "Option::is_none")]
+    pub escrow_id: Option<String>,
+    #[serde(
+        rename = "authorizationId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub authorization_id: Option<String>,
+    #[serde(rename = "jobId")]
+    pub job_id: String,
+    #[serde(rename = "receiptRef")]
+    pub receipt_ref: String,
+    #[serde(rename = "validationRefs")]
+    pub validation_refs: Vec<String>,
+    #[serde(rename = "amountReleased")]
+    pub amount_released: f64,
+    #[serde(rename = "amountRefunded")]
+    pub amount_refunded: f64,
+    pub penalties: Vec<MarketplacePenaltyV1>,
+    pub timestamp: String,
+    pub status: SettlementStatus,
+    pub signatures: Vec<String>,
+    #[serde(
+        rename = "sourceSettlementId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_settlement_id: Option<String>,
+    #[serde(rename = "projectionWarnings", default)]
+    pub projection_warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SettlementRecordV2VerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "settlementId")]
+    pub settlement_id: String,
+    pub valid: bool,
+    pub issues: Vec<MarketplaceVerificationIssueV1>,
+    pub warnings: Vec<MarketplaceVerificationIssueV1>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum DisputeRecordStatusV2 {
+    Open,
+    UnderReview,
+    Resolved,
+    Rejected,
+    Withdrawn,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DisputeRecordTimestampsV2 {
+    #[serde(rename = "openedAt")]
+    pub opened_at: String,
+    #[serde(rename = "updatedAt", default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(
+        rename = "resolvedAt",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub resolved_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DisputeRecordV2 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "disputeId")]
+    pub dispute_id: String,
+    #[serde(rename = "openerId")]
+    pub opener_id: String,
+    #[serde(rename = "respondentId")]
+    pub respondent_id: String,
+    #[serde(rename = "jobId")]
+    pub job_id: String,
+    #[serde(rename = "receiptRefs")]
+    pub receipt_refs: Vec<String>,
+    #[serde(rename = "claimType")]
+    pub claim_type: String,
+    #[serde(rename = "evidenceRefs")]
+    pub evidence_refs: Vec<String>,
+    #[serde(rename = "requestedResolution")]
+    pub requested_resolution: String,
+    pub status: DisputeRecordStatusV2,
+    #[serde(
+        rename = "decisionRef",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub decision_ref: Option<String>,
+    pub timestamps: DisputeRecordTimestampsV2,
+    pub signatures: Vec<String>,
+    #[serde(
+        rename = "sourceDisputeId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_dispute_id: Option<String>,
+    #[serde(rename = "projectionWarnings", default)]
+    pub projection_warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DisputeRecordV2VerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "disputeId")]
+    pub dispute_id: String,
+    pub valid: bool,
+    pub issues: Vec<MarketplaceVerificationIssueV1>,
+    pub warnings: Vec<MarketplaceVerificationIssueV1>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum MarketplaceAuditEventTypeV1 {
+    PaymentAuthorized,
+    EscrowLocked,
+    SettlementRecorded,
+    DisputeOpened,
+    RefundRecorded,
+    DisputeRejected,
+    SlashingDecided,
+    ListingUpdated,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplaceAuditEventV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "eventId")]
+    pub event_id: String,
+    #[serde(rename = "eventType")]
+    pub event_type: MarketplaceAuditEventTypeV1,
+    #[serde(rename = "actorId")]
+    pub actor_id: String,
+    #[serde(rename = "relatedObjectId")]
+    pub related_object_id: String,
+    #[serde(
+        rename = "previousStatus",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub previous_status: Option<String>,
+    #[serde(rename = "newStatus")]
+    pub new_status: String,
+    #[serde(rename = "evidenceRefs")]
+    pub evidence_refs: Vec<String>,
+    pub timestamp: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MarketplaceAuditEventVerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "eventId")]
+    pub event_id: String,
+    pub valid: bool,
+    pub issues: Vec<MarketplaceVerificationIssueV1>,
+    pub warnings: Vec<MarketplaceVerificationIssueV1>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum SlashingDecisionStatusV1 {
+    Proposed,
+    Final,
+    Appealed,
+    Reversed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SlashingDecisionV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "decisionId")]
+    pub decision_id: String,
+    #[serde(rename = "subjectId")]
+    pub subject_id: String,
+    pub reason: String,
+    #[serde(rename = "evidenceRefs")]
+    pub evidence_refs: Vec<String>,
+    pub amount: f64,
+    pub currency: String,
+    #[serde(rename = "appealWindow")]
+    pub appeal_window: String,
+    #[serde(rename = "decidingAuthority")]
+    pub deciding_authority: String,
+    pub status: SlashingDecisionStatusV1,
+    #[serde(
+        rename = "sourceSlashingId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_slashing_id: Option<String>,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SlashingDecisionVerificationV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "decisionId")]
+    pub decision_id: String,
+    pub valid: bool,
+    pub issues: Vec<MarketplaceVerificationIssueV1>,
+    pub warnings: Vec<MarketplaceVerificationIssueV1>,
+    #[serde(rename = "expectedSignature")]
+    pub expected_signature: String,
+    #[serde(rename = "verifiedAt")]
+    pub verified_at: String,
+}
+
+pub fn payment_authorization_v2_from_v1(
+    authorization: &PaymentAuthorizationV1,
+) -> PaymentAuthorizationV2 {
+    let mut evidence_refs = Vec::new();
+    push_evidence_ref(
+        &mut evidence_refs,
+        format!(
+            "local://marketplace/payment-authorization/{}",
+            authorization.authorization_id
+        ),
+    );
+    if let Some(payment_ref) = authorization.payment_ref.as_deref() {
+        push_evidence_ref(&mut evidence_refs, payment_ref);
+    }
+    if let Some(escrow_ref) = authorization.escrow_ref.as_deref() {
+        push_evidence_ref(&mut evidence_refs, escrow_ref);
+    }
+    let listing_id = if authorization.job_id.is_some() {
+        None
+    } else {
+        Some(authorization.offer_id.clone())
+    };
+    let mut projection_warnings = Vec::new();
+    if authorization.job_id.is_none() {
+        projection_warnings.push(
+            "V1 payment authorization did not carry jobId; projected listingId from offerId"
+                .to_string(),
+        );
+    }
+    let mut v2 = PaymentAuthorizationV2 {
+        schema_version: PAYMENT_AUTHORIZATION_V2_SCHEMA_VERSION.to_string(),
+        authorization_id: String::new(),
+        payer_id: authorization.payer.clone(),
+        payee_id: Some(authorization.payee.clone()),
+        escrow_id: None,
+        job_id: authorization.job_id.clone(),
+        listing_id,
+        amount: authorization.amount,
+        currency: authorization.currency.clone(),
+        max_amount: authorization.max_amount,
+        expiry: authorization.expires_at.clone(),
+        payment_rail: payment_rail_from_adapter(&authorization.adapter),
+        chain_id: None,
+        nonce: authorization.authorization_id.clone(),
+        policy_ref: "local://marketplace/payment-policy/default".to_string(),
+        evidence_refs,
+        created_at: authorization.authorized_at.clone(),
+        source_authorization_id: Some(authorization.authorization_id.clone()),
+        projection_warnings,
+        signature: String::new(),
+    };
+    sign_payment_authorization_v2(&mut v2);
+    v2
+}
+
+pub fn sign_payment_authorization_v2(authorization: &mut PaymentAuthorizationV2) {
+    authorization.signature = expected_payment_authorization_v2_signature(authorization);
+    authorization.authorization_id = canonical_payment_authorization_v2_id(authorization);
+}
+
+pub fn expected_payment_authorization_v2_signature(
+    authorization: &PaymentAuthorizationV2,
+) -> String {
+    format!(
+        "{DEV_PAYMENT_AUTHORIZATION_V2_SIGNATURE_PREFIX}:{}",
+        hash_canonical_json(&canonicalize_json(&payment_authorization_v2_signing_value(
+            authorization
+        )))
+    )
+}
+
+pub fn canonical_payment_authorization_v2_id(authorization: &PaymentAuthorizationV2) -> String {
+    stable_id(
+        "payment-authorization",
+        &payment_authorization_v2_signing_value(authorization),
+    )
+}
+
+pub fn verify_payment_authorization_v2(
+    authorization: &PaymentAuthorizationV2,
+) -> PaymentAuthorizationV2VerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_signature = expected_payment_authorization_v2_signature(authorization);
+
+    if authorization.schema_version != PAYMENT_AUTHORIZATION_V2_SCHEMA_VERSION {
+        issues.push(marketplace_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {PAYMENT_AUTHORIZATION_V2_SCHEMA_VERSION}"),
+        ));
+    }
+    if authorization.authorization_id.trim().is_empty() {
+        issues.push(marketplace_issue(
+            "$.authorizationId",
+            "Payment authorization id is required",
+        ));
+    } else if authorization.authorization_id != canonical_payment_authorization_v2_id(authorization)
+    {
+        issues.push(marketplace_issue(
+            "$.authorizationId",
+            "Payment authorization id does not match canonical signed content",
+        ));
+    }
+    require_marketplace_field(
+        &authorization.payer_id,
+        "$.payerId",
+        "Payer id is required",
+        &mut issues,
+    );
+    require_marketplace_option_field(
+        authorization.payee_id.as_deref(),
+        authorization.escrow_id.as_deref(),
+        "$.payeeId",
+        "$.escrowId",
+        "PaymentAuthorizationV2 requires payeeId or escrowId",
+        &mut issues,
+    );
+    require_marketplace_option_field(
+        authorization.job_id.as_deref(),
+        authorization.listing_id.as_deref(),
+        "$.jobId",
+        "$.listingId",
+        "PaymentAuthorizationV2 requires jobId or listingId",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &authorization.currency,
+        "$.currency",
+        "Currency is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &authorization.nonce,
+        "$.nonce",
+        "Nonce is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &authorization.policy_ref,
+        "$.policyRef",
+        "Policy reference is required",
+        &mut issues,
+    );
+    if !authorization.amount.is_finite() || authorization.amount < 0.0 {
+        issues.push(marketplace_issue(
+            "$.amount",
+            "Amount must be a finite non-negative number",
+        ));
+    }
+    if let Some(max_amount) = authorization.max_amount {
+        if !max_amount.is_finite() || max_amount < 0.0 {
+            issues.push(marketplace_issue(
+                "$.maxAmount",
+                "Maximum amount must be a finite non-negative number",
+            ));
+        } else if max_amount + 0.000_000_1 < authorization.amount {
+            issues.push(marketplace_issue(
+                "$.maxAmount",
+                "Maximum amount must cover amount",
+            ));
+        }
+    }
+    if matches!(authorization.payment_rail, PaymentRailV2::Blockchain)
+        && authorization
+            .chain_id
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .is_empty()
+    {
+        issues.push(marketplace_issue(
+            "$.chainId",
+            "Blockchain payment rails require chainId",
+        ));
+    }
+    parse_marketplace_time(
+        &authorization.expiry,
+        "$.expiry",
+        "Payment authorization expiry must be RFC3339",
+        &mut issues,
+    );
+    parse_marketplace_time(
+        &authorization.created_at,
+        "$.createdAt",
+        "Payment authorization createdAt must be RFC3339",
+        &mut issues,
+    );
+    validate_marketplace_refs(
+        &authorization.evidence_refs,
+        "$.evidenceRefs",
+        &mut issues,
+        &mut warnings,
+    );
+    verify_marketplace_signature_string(
+        &authorization.signature,
+        "payment-authorization-v2",
+        &payment_authorization_v2_signing_value(authorization),
+        Some(&authorization.payer_id),
+        &expected_signature,
+        "$.signature",
+        "PaymentAuthorizationV2 signature does not match canonical dev signature or Ed25519 identity envelope",
+        &mut issues,
+    );
+
+    PaymentAuthorizationV2VerificationV1 {
+        schema_version: PAYMENT_AUTHORIZATION_V2_VERIFICATION_SCHEMA_VERSION.to_string(),
+        authorization_id: authorization.authorization_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+pub fn escrow_record_v2_from_v1(escrow: &EscrowRecordV1) -> EscrowRecordV2 {
+    let mut release_conditions = escrow
+        .terms
+        .get("releaseConditions")
+        .cloned()
+        .unwrap_or_else(|| {
+            json!({
+                "requiresReceipt": true,
+                "requiredSettlementStatus": "settled"
+            })
+        });
+    if release_conditions == Value::Null {
+        release_conditions = empty_terms();
+    }
+    let refund_conditions = escrow
+        .terms
+        .get("refundConditions")
+        .cloned()
+        .unwrap_or_else(|| json!({ "sourceTerms": escrow.terms.clone() }));
+    let dispute_window = escrow
+        .terms
+        .get("disputeWindow")
+        .and_then(Value::as_str)
+        .unwrap_or("P7D")
+        .to_string();
+    let mut v2 = EscrowRecordV2 {
+        schema_version: ESCROW_RECORD_V2_SCHEMA_VERSION.to_string(),
+        escrow_id: String::new(),
+        authorization_id: escrow.authorization_id.clone(),
+        payer_id: escrow.payer.clone(),
+        intended_payee_id: escrow.payee.clone(),
+        amount_locked: escrow.amount,
+        currency: escrow.currency.clone(),
+        release_conditions,
+        refund_conditions,
+        dispute_window,
+        evidence_refs: escrow.evidence_refs.clone(),
+        status: escrow.status.clone(),
+        created_at: escrow.created_at.clone(),
+        expires_at: escrow.expires_at.clone(),
+        source_escrow_id: Some(escrow.escrow_id.clone()),
+        projection_warnings: Vec::new(),
+        signature: String::new(),
+    };
+    sign_escrow_record_v2(&mut v2);
+    v2
+}
+
+pub fn sign_escrow_record_v2(escrow: &mut EscrowRecordV2) {
+    escrow.signature = expected_escrow_record_v2_signature(escrow);
+    escrow.escrow_id = canonical_escrow_record_v2_id(escrow);
+}
+
+pub fn expected_escrow_record_v2_signature(escrow: &EscrowRecordV2) -> String {
+    format!(
+        "{DEV_ESCROW_RECORD_V2_SIGNATURE_PREFIX}:{}",
+        hash_canonical_json(&canonicalize_json(&escrow_record_v2_signing_value(escrow)))
+    )
+}
+
+pub fn canonical_escrow_record_v2_id(escrow: &EscrowRecordV2) -> String {
+    stable_id("escrow", &escrow_record_v2_signing_value(escrow))
+}
+
+pub fn verify_escrow_record_v2(escrow: &EscrowRecordV2) -> EscrowRecordV2VerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_signature = expected_escrow_record_v2_signature(escrow);
+
+    if escrow.schema_version != ESCROW_RECORD_V2_SCHEMA_VERSION {
+        issues.push(marketplace_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {ESCROW_RECORD_V2_SCHEMA_VERSION}"),
+        ));
+    }
+    if escrow.escrow_id.trim().is_empty() {
+        issues.push(marketplace_issue("$.escrowId", "Escrow id is required"));
+    } else if escrow.escrow_id != canonical_escrow_record_v2_id(escrow) {
+        issues.push(marketplace_issue(
+            "$.escrowId",
+            "Escrow id does not match canonical signed content",
+        ));
+    }
+    require_marketplace_field(
+        &escrow.authorization_id,
+        "$.authorizationId",
+        "Authorization id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &escrow.payer_id,
+        "$.payerId",
+        "Payer id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &escrow.intended_payee_id,
+        "$.intendedPayeeId",
+        "Intended payee id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &escrow.currency,
+        "$.currency",
+        "Currency is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &escrow.dispute_window,
+        "$.disputeWindow",
+        "Dispute window is required",
+        &mut issues,
+    );
+    if !escrow.amount_locked.is_finite() || escrow.amount_locked < 0.0 {
+        issues.push(marketplace_issue(
+            "$.amountLocked",
+            "Locked amount must be a finite non-negative number",
+        ));
+    }
+    parse_marketplace_time(
+        &escrow.created_at,
+        "$.createdAt",
+        "Escrow createdAt must be RFC3339",
+        &mut issues,
+    );
+    parse_marketplace_time(
+        &escrow.expires_at,
+        "$.expiresAt",
+        "Escrow expiresAt must be RFC3339",
+        &mut issues,
+    );
+    validate_marketplace_refs(
+        &escrow.evidence_refs,
+        "$.evidenceRefs",
+        &mut issues,
+        &mut warnings,
+    );
+    verify_marketplace_signature_string(
+        &escrow.signature,
+        "escrow-record-v2",
+        &escrow_record_v2_signing_value(escrow),
+        None,
+        &expected_signature,
+        "$.signature",
+        "EscrowRecordV2 signature does not match canonical dev signature or Ed25519 identity envelope",
+        &mut issues,
+    );
+
+    EscrowRecordV2VerificationV1 {
+        schema_version: ESCROW_RECORD_V2_VERIFICATION_SCHEMA_VERSION.to_string(),
+        escrow_id: escrow.escrow_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+pub fn settlement_record_v2_from_v1(settlement: &SettlementEventV1) -> SettlementRecordV2 {
+    let (amount_released, amount_refunded) = settlement_record_v2_amounts(settlement);
+    let receipt_ref = settlement
+        .receipt_ref
+        .clone()
+        .unwrap_or_else(|| format!("local://receipt/{}", settlement.receipt_id));
+    let mut validation_refs = settlement.evidence_refs.clone();
+    validation_refs.sort();
+    validation_refs.dedup();
+    let mut projection_warnings = Vec::new();
+    let authorization_id = settlement
+        .payment_authorization_id
+        .clone()
+        .or_else(|| settlement.payment_ref.clone())
+        .or_else(|| {
+            projection_warnings.push(
+                "V1 settlement event did not carry paymentAuthorizationId, paymentRef, or escrowId; synthesized a local compatibility authorization reference"
+                    .to_string(),
+            );
+            Some(format!(
+                "local://marketplace/unfunded-settlement/{}",
+                settlement.settlement_id
+            ))
+        });
+    let job_id = settlement
+        .job_id
+        .clone()
+        .unwrap_or_else(|| format!("job-for-{}", settlement.request_id));
+    let mut v2 = SettlementRecordV2 {
+        schema_version: SETTLEMENT_RECORD_V2_SCHEMA_VERSION.to_string(),
+        settlement_id: String::new(),
+        escrow_id: None,
+        authorization_id,
+        job_id,
+        receipt_ref,
+        validation_refs,
+        amount_released,
+        amount_refunded,
+        penalties: Vec::new(),
+        timestamp: settlement.occurred_at.clone(),
+        status: settlement.status.clone(),
+        signatures: Vec::new(),
+        source_settlement_id: Some(settlement.settlement_id.clone()),
+        projection_warnings,
+    };
+    sign_settlement_record_v2(&mut v2);
+    v2
+}
+
+pub fn sign_settlement_record_v2(settlement: &mut SettlementRecordV2) {
+    settlement.signatures = vec![expected_settlement_record_v2_signature(settlement)];
+    settlement.settlement_id = canonical_settlement_record_v2_id(settlement);
+}
+
+pub fn expected_settlement_record_v2_signature(settlement: &SettlementRecordV2) -> String {
+    format!(
+        "{DEV_SETTLEMENT_RECORD_V2_SIGNATURE_PREFIX}:{}",
+        hash_canonical_json(&canonicalize_json(&settlement_record_v2_signing_value(
+            settlement
+        )))
+    )
+}
+
+pub fn canonical_settlement_record_v2_id(settlement: &SettlementRecordV2) -> String {
+    stable_id(
+        "settlement",
+        &settlement_record_v2_signing_value(settlement),
+    )
+}
+
+pub fn verify_settlement_record_v2(
+    settlement: &SettlementRecordV2,
+) -> SettlementRecordV2VerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_signature = expected_settlement_record_v2_signature(settlement);
+
+    if settlement.schema_version != SETTLEMENT_RECORD_V2_SCHEMA_VERSION {
+        issues.push(marketplace_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {SETTLEMENT_RECORD_V2_SCHEMA_VERSION}"),
+        ));
+    }
+    if settlement.settlement_id.trim().is_empty() {
+        issues.push(marketplace_issue(
+            "$.settlementId",
+            "Settlement id is required",
+        ));
+    } else if settlement.settlement_id != canonical_settlement_record_v2_id(settlement) {
+        issues.push(marketplace_issue(
+            "$.settlementId",
+            "Settlement id does not match canonical signed content",
+        ));
+    }
+    require_marketplace_option_field(
+        settlement.escrow_id.as_deref(),
+        settlement.authorization_id.as_deref(),
+        "$.escrowId",
+        "$.authorizationId",
+        "SettlementRecordV2 requires escrowId or authorizationId",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &settlement.job_id,
+        "$.jobId",
+        "Job id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &settlement.receipt_ref,
+        "$.receiptRef",
+        "Receipt reference is required",
+        &mut issues,
+    );
+    if !settlement.amount_released.is_finite() || settlement.amount_released < 0.0 {
+        issues.push(marketplace_issue(
+            "$.amountReleased",
+            "Released amount must be a finite non-negative number",
+        ));
+    }
+    if !settlement.amount_refunded.is_finite() || settlement.amount_refunded < 0.0 {
+        issues.push(marketplace_issue(
+            "$.amountRefunded",
+            "Refunded amount must be a finite non-negative number",
+        ));
+    }
+    for (index, penalty) in settlement.penalties.iter().enumerate() {
+        validate_marketplace_penalty(penalty, index, &mut issues, &mut warnings);
+    }
+    parse_marketplace_time(
+        &settlement.timestamp,
+        "$.timestamp",
+        "Settlement timestamp must be RFC3339",
+        &mut issues,
+    );
+    validate_marketplace_refs(
+        &settlement.validation_refs,
+        "$.validationRefs",
+        &mut issues,
+        &mut warnings,
+    );
+    verify_marketplace_signature_list(
+        &settlement.signatures,
+        "settlement-record-v2",
+        &settlement_record_v2_signing_value(settlement),
+        None,
+        &expected_signature,
+        "$.signatures",
+        "SettlementRecordV2 signatures must include the canonical dev signature or a valid Ed25519 identity envelope",
+        &mut issues,
+    );
+
+    SettlementRecordV2VerificationV1 {
+        schema_version: SETTLEMENT_RECORD_V2_VERIFICATION_SCHEMA_VERSION.to_string(),
+        settlement_id: settlement.settlement_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+pub fn dispute_record_v2_from_evidence(dispute: &DisputeEvidenceV1) -> DisputeRecordV2 {
+    let mut v2 = DisputeRecordV2 {
+        schema_version: DISPUTE_RECORD_V2_SCHEMA_VERSION.to_string(),
+        dispute_id: String::new(),
+        opener_id: dispute.claimant.clone(),
+        respondent_id: dispute.runner_id.clone(),
+        job_id: format!("job-for-{}", dispute.request_id),
+        receipt_refs: vec![format!("local://receipt/{}", dispute.receipt_id)],
+        claim_type: dispute_claim_type_label(&dispute.claim_kind),
+        evidence_refs: dispute.evidence_refs.clone(),
+        requested_resolution: dispute.summary.clone(),
+        status: DisputeRecordStatusV2::Open,
+        decision_ref: None,
+        timestamps: DisputeRecordTimestampsV2 {
+            opened_at: dispute.created_at.clone(),
+            updated_at: None,
+            resolved_at: None,
+        },
+        signatures: Vec::new(),
+        source_dispute_id: Some(dispute.dispute_id.clone()),
+        projection_warnings: vec![
+            "V1 dispute evidence has no explicit respondent account; runnerId was used".to_string(),
+        ],
+    };
+    sign_dispute_record_v2(&mut v2);
+    v2
+}
+
+pub fn sign_dispute_record_v2(dispute: &mut DisputeRecordV2) {
+    dispute.signatures = vec![expected_dispute_record_v2_signature(dispute)];
+    dispute.dispute_id = canonical_dispute_record_v2_id(dispute);
+}
+
+pub fn expected_dispute_record_v2_signature(dispute: &DisputeRecordV2) -> String {
+    format!(
+        "{DEV_DISPUTE_RECORD_V2_SIGNATURE_PREFIX}:{}",
+        hash_canonical_json(&canonicalize_json(&dispute_record_v2_signing_value(
+            dispute
+        )))
+    )
+}
+
+pub fn canonical_dispute_record_v2_id(dispute: &DisputeRecordV2) -> String {
+    stable_id("dispute", &dispute_record_v2_signing_value(dispute))
+}
+
+pub fn verify_dispute_record_v2(dispute: &DisputeRecordV2) -> DisputeRecordV2VerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_signature = expected_dispute_record_v2_signature(dispute);
+
+    if dispute.schema_version != DISPUTE_RECORD_V2_SCHEMA_VERSION {
+        issues.push(marketplace_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {DISPUTE_RECORD_V2_SCHEMA_VERSION}"),
+        ));
+    }
+    if dispute.dispute_id.trim().is_empty() {
+        issues.push(marketplace_issue("$.disputeId", "Dispute id is required"));
+    } else if dispute.dispute_id != canonical_dispute_record_v2_id(dispute) {
+        issues.push(marketplace_issue(
+            "$.disputeId",
+            "Dispute id does not match canonical signed content",
+        ));
+    }
+    require_marketplace_field(
+        &dispute.opener_id,
+        "$.openerId",
+        "Opener id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &dispute.respondent_id,
+        "$.respondentId",
+        "Respondent id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &dispute.job_id,
+        "$.jobId",
+        "Job id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &dispute.claim_type,
+        "$.claimType",
+        "Claim type is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &dispute.requested_resolution,
+        "$.requestedResolution",
+        "Requested resolution is required",
+        &mut issues,
+    );
+    if dispute.receipt_refs.is_empty() {
+        issues.push(marketplace_issue(
+            "$.receiptRefs",
+            "DisputeRecordV2 requires at least one receipt reference",
+        ));
+    }
+    validate_marketplace_refs(
+        &dispute.receipt_refs,
+        "$.receiptRefs",
+        &mut issues,
+        &mut warnings,
+    );
+    if dispute.evidence_refs.is_empty() {
+        issues.push(marketplace_issue(
+            "$.evidenceRefs",
+            "DisputeRecordV2 requires evidenceRefs",
+        ));
+    }
+    validate_marketplace_refs(
+        &dispute.evidence_refs,
+        "$.evidenceRefs",
+        &mut issues,
+        &mut warnings,
+    );
+    parse_marketplace_time(
+        &dispute.timestamps.opened_at,
+        "$.timestamps.openedAt",
+        "Dispute openedAt must be RFC3339",
+        &mut issues,
+    );
+    if let Some(updated_at) = dispute.timestamps.updated_at.as_deref() {
+        parse_marketplace_time(
+            updated_at,
+            "$.timestamps.updatedAt",
+            "Dispute updatedAt must be RFC3339",
+            &mut issues,
+        );
+    }
+    if let Some(resolved_at) = dispute.timestamps.resolved_at.as_deref() {
+        parse_marketplace_time(
+            resolved_at,
+            "$.timestamps.resolvedAt",
+            "Dispute resolvedAt must be RFC3339",
+            &mut issues,
+        );
+    }
+    if matches!(dispute.status, DisputeRecordStatusV2::Resolved)
+        && dispute
+            .decision_ref
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .is_empty()
+    {
+        issues.push(marketplace_issue(
+            "$.decisionRef",
+            "Resolved disputes require decisionRef",
+        ));
+    }
+    verify_marketplace_signature_list(
+        &dispute.signatures,
+        "dispute-record-v2",
+        &dispute_record_v2_signing_value(dispute),
+        Some(&dispute.opener_id),
+        &expected_signature,
+        "$.signatures",
+        "DisputeRecordV2 signatures must include the canonical dev signature or a valid Ed25519 identity envelope",
+        &mut issues,
+    );
+
+    DisputeRecordV2VerificationV1 {
+        schema_version: DISPUTE_RECORD_V2_VERIFICATION_SCHEMA_VERSION.to_string(),
+        dispute_id: dispute.dispute_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+pub fn marketplace_audit_event(
+    event_type: MarketplaceAuditEventTypeV1,
+    actor_id: impl Into<String>,
+    related_object_id: impl Into<String>,
+    previous_status: Option<String>,
+    new_status: impl Into<String>,
+    evidence_refs: Vec<String>,
+) -> MarketplaceAuditEventV1 {
+    let mut event = MarketplaceAuditEventV1 {
+        schema_version: MARKETPLACE_AUDIT_EVENT_SCHEMA_VERSION.to_string(),
+        event_id: String::new(),
+        event_type,
+        actor_id: actor_id.into(),
+        related_object_id: related_object_id.into(),
+        previous_status,
+        new_status: new_status.into(),
+        evidence_refs,
+        timestamp: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        signature: String::new(),
+    };
+    sign_marketplace_audit_event(&mut event);
+    event
+}
+
+pub fn sign_marketplace_audit_event(event: &mut MarketplaceAuditEventV1) {
+    event.signature = expected_marketplace_audit_event_signature(event);
+    event.event_id = canonical_marketplace_audit_event_id(event);
+}
+
+pub fn expected_marketplace_audit_event_signature(event: &MarketplaceAuditEventV1) -> String {
+    format!(
+        "{DEV_MARKETPLACE_AUDIT_EVENT_SIGNATURE_PREFIX}:{}",
+        hash_canonical_json(&canonicalize_json(&marketplace_audit_event_signing_value(
+            event
+        )))
+    )
+}
+
+pub fn canonical_marketplace_audit_event_id(event: &MarketplaceAuditEventV1) -> String {
+    stable_id(
+        "marketplace-event",
+        &marketplace_audit_event_signing_value(event),
+    )
+}
+
+pub fn verify_marketplace_audit_event(
+    event: &MarketplaceAuditEventV1,
+) -> MarketplaceAuditEventVerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_signature = expected_marketplace_audit_event_signature(event);
+
+    if event.schema_version != MARKETPLACE_AUDIT_EVENT_SCHEMA_VERSION {
+        issues.push(marketplace_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {MARKETPLACE_AUDIT_EVENT_SCHEMA_VERSION}"),
+        ));
+    }
+    if event.event_id.trim().is_empty() {
+        issues.push(marketplace_issue("$.eventId", "Audit event id is required"));
+    } else if event.event_id != canonical_marketplace_audit_event_id(event) {
+        issues.push(marketplace_issue(
+            "$.eventId",
+            "Audit event id does not match canonical signed content",
+        ));
+    }
+    require_marketplace_field(
+        &event.actor_id,
+        "$.actorId",
+        "Actor id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &event.related_object_id,
+        "$.relatedObjectId",
+        "Related object id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &event.new_status,
+        "$.newStatus",
+        "New status is required",
+        &mut issues,
+    );
+    if event.evidence_refs.is_empty() {
+        warnings.push(marketplace_issue(
+            "$.evidenceRefs",
+            "Audit events should include evidenceRefs for replay and review",
+        ));
+    }
+    validate_marketplace_refs(
+        &event.evidence_refs,
+        "$.evidenceRefs",
+        &mut issues,
+        &mut warnings,
+    );
+    parse_marketplace_time(
+        &event.timestamp,
+        "$.timestamp",
+        "Audit event timestamp must be RFC3339",
+        &mut issues,
+    );
+    verify_marketplace_signature_string(
+        &event.signature,
+        "marketplace-audit-event",
+        &marketplace_audit_event_signing_value(event),
+        Some(&event.actor_id),
+        &expected_signature,
+        "$.signature",
+        "MarketplaceAuditEventV1 signature does not match canonical dev signature or Ed25519 identity envelope",
+        &mut issues,
+    );
+
+    MarketplaceAuditEventVerificationV1 {
+        schema_version: MARKETPLACE_AUDIT_EVENT_VERIFICATION_SCHEMA_VERSION.to_string(),
+        event_id: event.event_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+pub fn slashing_decision_from_record(
+    record: &SlashingRecordV1,
+    deciding_authority: impl Into<String>,
+    appeal_window: impl Into<String>,
+) -> SlashingDecisionV1 {
+    let mut decision = SlashingDecisionV1 {
+        schema_version: SLASHING_DECISION_SCHEMA_VERSION.to_string(),
+        decision_id: String::new(),
+        subject_id: record.slashed_party.clone(),
+        reason: record.reason.clone(),
+        evidence_refs: record.evidence_refs.clone(),
+        amount: record.amount,
+        currency: record.currency.clone(),
+        appeal_window: appeal_window.into(),
+        deciding_authority: deciding_authority.into(),
+        status: SlashingDecisionStatusV1::Proposed,
+        source_slashing_id: Some(record.slashing_id.clone()),
+        signature: String::new(),
+    };
+    sign_slashing_decision(&mut decision);
+    decision
+}
+
+pub fn sign_slashing_decision(decision: &mut SlashingDecisionV1) {
+    decision.signature = expected_slashing_decision_signature(decision);
+    decision.decision_id = canonical_slashing_decision_id(decision);
+}
+
+pub fn expected_slashing_decision_signature(decision: &SlashingDecisionV1) -> String {
+    format!(
+        "{DEV_SLASHING_DECISION_SIGNATURE_PREFIX}:{}",
+        hash_canonical_json(&canonicalize_json(&slashing_decision_signing_value(
+            decision
+        )))
+    )
+}
+
+pub fn canonical_slashing_decision_id(decision: &SlashingDecisionV1) -> String {
+    stable_id(
+        "slashing-decision",
+        &slashing_decision_signing_value(decision),
+    )
+}
+
+pub fn verify_slashing_decision(decision: &SlashingDecisionV1) -> SlashingDecisionVerificationV1 {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let expected_signature = expected_slashing_decision_signature(decision);
+
+    if decision.schema_version != SLASHING_DECISION_SCHEMA_VERSION {
+        issues.push(marketplace_issue(
+            "$.schemaVersion",
+            format!("Expected schemaVersion to be {SLASHING_DECISION_SCHEMA_VERSION}"),
+        ));
+    }
+    if decision.decision_id.trim().is_empty() {
+        issues.push(marketplace_issue(
+            "$.decisionId",
+            "Slashing decision id is required",
+        ));
+    } else if decision.decision_id != canonical_slashing_decision_id(decision) {
+        issues.push(marketplace_issue(
+            "$.decisionId",
+            "Slashing decision id does not match canonical signed content",
+        ));
+    }
+    require_marketplace_field(
+        &decision.subject_id,
+        "$.subjectId",
+        "Subject id is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &decision.reason,
+        "$.reason",
+        "Reason is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &decision.currency,
+        "$.currency",
+        "Currency is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &decision.appeal_window,
+        "$.appealWindow",
+        "Appeal window is required",
+        &mut issues,
+    );
+    require_marketplace_field(
+        &decision.deciding_authority,
+        "$.decidingAuthority",
+        "Deciding authority is required",
+        &mut issues,
+    );
+    if !decision.amount.is_finite() || decision.amount < 0.0 {
+        issues.push(marketplace_issue(
+            "$.amount",
+            "Slashing amount must be a finite non-negative number",
+        ));
+    }
+    if decision.evidence_refs.is_empty() {
+        issues.push(marketplace_issue(
+            "$.evidenceRefs",
+            "SlashingDecisionV1 requires evidenceRefs",
+        ));
+    }
+    validate_marketplace_refs(
+        &decision.evidence_refs,
+        "$.evidenceRefs",
+        &mut issues,
+        &mut warnings,
+    );
+    verify_marketplace_signature_string(
+        &decision.signature,
+        "slashing-decision",
+        &slashing_decision_signing_value(decision),
+        Some(&decision.deciding_authority),
+        &expected_signature,
+        "$.signature",
+        "SlashingDecisionV1 signature does not match canonical dev signature or Ed25519 identity envelope",
+        &mut issues,
+    );
+
+    SlashingDecisionVerificationV1 {
+        schema_version: SLASHING_DECISION_VERIFICATION_SCHEMA_VERSION.to_string(),
+        decision_id: decision.decision_id.clone(),
+        valid: issues.is_empty(),
+        issues,
+        warnings,
+        expected_signature,
+        verified_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
 }
 
 pub fn listing_from_registry_entry(
@@ -7872,6 +9240,228 @@ fn parse_marketplace_time(
     }
 }
 
+fn require_marketplace_field(
+    value: &str,
+    path: &str,
+    message: &str,
+    issues: &mut Vec<MarketplaceVerificationIssueV1>,
+) {
+    if value.trim().is_empty() {
+        issues.push(marketplace_issue(path, message));
+    }
+}
+
+fn require_marketplace_option_field(
+    left: Option<&str>,
+    right: Option<&str>,
+    left_path: &str,
+    right_path: &str,
+    message: &str,
+    issues: &mut Vec<MarketplaceVerificationIssueV1>,
+) {
+    let has_left = left
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some();
+    let has_right = right
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some();
+    if !has_left && !has_right {
+        issues.push(marketplace_issue(
+            format!("{left_path}|{right_path}"),
+            message,
+        ));
+    }
+}
+
+fn validate_marketplace_refs(
+    refs: &[String],
+    path: &str,
+    issues: &mut Vec<MarketplaceVerificationIssueV1>,
+    warnings: &mut Vec<MarketplaceVerificationIssueV1>,
+) {
+    for (index, reference) in refs.iter().enumerate() {
+        let reference_path = format!("{path}[{index}]");
+        if reference.trim().is_empty() {
+            issues.push(marketplace_issue(
+                reference_path,
+                "Reference must not be empty",
+            ));
+        } else if !looks_like_marketplace_ref(reference) {
+            warnings.push(marketplace_issue(
+                reference_path,
+                "Reference is not a recognized storage or audit reference",
+            ));
+        }
+    }
+}
+
+fn validate_marketplace_penalty(
+    penalty: &MarketplacePenaltyV1,
+    index: usize,
+    issues: &mut Vec<MarketplaceVerificationIssueV1>,
+    warnings: &mut Vec<MarketplaceVerificationIssueV1>,
+) {
+    let path = format!("$.penalties[{index}]");
+    require_marketplace_field(
+        &penalty.subject_id,
+        &format!("{path}.subjectId"),
+        "Penalty subject id is required",
+        issues,
+    );
+    require_marketplace_field(
+        &penalty.currency,
+        &format!("{path}.currency"),
+        "Penalty currency is required",
+        issues,
+    );
+    require_marketplace_field(
+        &penalty.reason,
+        &format!("{path}.reason"),
+        "Penalty reason is required",
+        issues,
+    );
+    if !penalty.amount.is_finite() || penalty.amount < 0.0 {
+        issues.push(marketplace_issue(
+            format!("{path}.amount"),
+            "Penalty amount must be a finite non-negative number",
+        ));
+    }
+    validate_marketplace_refs(
+        &penalty.evidence_refs,
+        &format!("{path}.evidenceRefs"),
+        issues,
+        warnings,
+    );
+}
+
+fn verify_marketplace_signature_string(
+    signature: &str,
+    domain: &str,
+    signing_value: &Value,
+    expected_subject: Option<&str>,
+    expected_signature: &str,
+    path: &str,
+    mismatch_message: &str,
+    issues: &mut Vec<MarketplaceVerificationIssueV1>,
+) {
+    issues.extend(marketplace_signature_issues(
+        signature,
+        domain,
+        signing_value,
+        expected_subject,
+        expected_signature,
+        path,
+        mismatch_message,
+    ));
+}
+
+fn verify_marketplace_signature_list(
+    signatures: &[String],
+    domain: &str,
+    signing_value: &Value,
+    expected_subject: Option<&str>,
+    expected_signature: &str,
+    path: &str,
+    mismatch_message: &str,
+    issues: &mut Vec<MarketplaceVerificationIssueV1>,
+) {
+    if signatures.is_empty() {
+        issues.push(marketplace_issue(
+            path,
+            "At least one signature is required",
+        ));
+        return;
+    }
+    if signatures.iter().enumerate().any(|(index, signature)| {
+        marketplace_signature_issues(
+            signature,
+            domain,
+            signing_value,
+            expected_subject,
+            expected_signature,
+            &format!("{path}[{index}]"),
+            mismatch_message,
+        )
+        .is_empty()
+    }) {
+        return;
+    }
+    issues.push(marketplace_issue(path, mismatch_message));
+}
+
+fn marketplace_signature_issues(
+    signature: &str,
+    domain: &str,
+    signing_value: &Value,
+    expected_subject: Option<&str>,
+    expected_signature: &str,
+    path: &str,
+    mismatch_message: &str,
+) -> Vec<MarketplaceVerificationIssueV1> {
+    let signature = signature.trim();
+    if signature.is_empty() {
+        return vec![marketplace_issue(path, "Signature is required")];
+    }
+    if signature.starts_with(hivemind_identity::COMPACT_SIGNATURE_PREFIX) {
+        let verification = hivemind_identity::verify_value_signature_string(
+            signature,
+            domain,
+            signing_value,
+            expected_subject,
+        );
+        return verification
+            .issues
+            .into_iter()
+            .map(|issue| {
+                marketplace_issue(
+                    marketplace_signature_issue_path(path, &issue.path),
+                    issue.message,
+                )
+            })
+            .collect();
+    }
+    if signature == expected_signature {
+        Vec::new()
+    } else {
+        vec![marketplace_issue(path, mismatch_message)]
+    }
+}
+
+fn marketplace_signature_issue_path(base_path: &str, signature_path: &str) -> String {
+    if signature_path == "$" {
+        return base_path.to_string();
+    }
+    if let Some(rest) = signature_path.strip_prefix("$.") {
+        return format!("{base_path}.{rest}");
+    }
+    format!("{base_path}.{signature_path}")
+}
+
+fn payment_rail_from_adapter(adapter: &PaymentAdapterKind) -> PaymentRailV2 {
+    match adapter {
+        PaymentAdapterKind::LocalDev => PaymentRailV2::LocalDev,
+        PaymentAdapterKind::ExternalTransaction => PaymentRailV2::External,
+        PaymentAdapterKind::Free => PaymentRailV2::Free,
+    }
+}
+
+fn settlement_record_v2_amounts(settlement: &SettlementEventV1) -> (f64, f64) {
+    match settlement.status {
+        SettlementStatus::Settled | SettlementStatus::PartiallySettled => (settlement.amount, 0.0),
+        SettlementStatus::Refunded => (0.0, settlement.amount),
+        _ => (0.0, 0.0),
+    }
+}
+
+fn dispute_claim_type_label(claim_kind: &hivemind_receipts::DisputeClaimKind) -> String {
+    serde_json::to_value(claim_kind)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| format!("{claim_kind:?}"))
+}
+
 fn empty_terms() -> Value {
     json!({})
 }
@@ -9164,6 +10754,62 @@ fn slashing_record_signing_value(record: &SlashingRecordV1) -> Value {
     value
 }
 
+fn payment_authorization_v2_signing_value(authorization: &PaymentAuthorizationV2) -> Value {
+    let mut value =
+        serde_json::to_value(authorization).expect("payment authorization v2 should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("authorizationId");
+        object.remove("signature");
+    }
+    value
+}
+
+fn escrow_record_v2_signing_value(escrow: &EscrowRecordV2) -> Value {
+    let mut value = serde_json::to_value(escrow).expect("escrow record v2 should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("escrowId");
+        object.remove("signature");
+    }
+    value
+}
+
+fn settlement_record_v2_signing_value(settlement: &SettlementRecordV2) -> Value {
+    let mut value =
+        serde_json::to_value(settlement).expect("settlement record v2 should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("settlementId");
+        object.remove("signatures");
+    }
+    value
+}
+
+fn dispute_record_v2_signing_value(dispute: &DisputeRecordV2) -> Value {
+    let mut value = serde_json::to_value(dispute).expect("dispute record v2 should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("disputeId");
+        object.remove("signatures");
+    }
+    value
+}
+
+fn marketplace_audit_event_signing_value(event: &MarketplaceAuditEventV1) -> Value {
+    let mut value = serde_json::to_value(event).expect("marketplace audit event should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("eventId");
+        object.remove("signature");
+    }
+    value
+}
+
+fn slashing_decision_signing_value(decision: &SlashingDecisionV1) -> Value {
+    let mut value = serde_json::to_value(decision).expect("slashing decision should serialize");
+    if let Value::Object(ref mut object) = value {
+        object.remove("decisionId");
+        object.remove("signature");
+    }
+    value
+}
+
 fn signature_issue_path(path: &str) -> String {
     if path == "$" {
         return "$.signature".to_string();
@@ -10157,6 +11803,191 @@ mod tests {
         );
         assert_eq!(verification.issues.len(), 0);
         assert_eq!(verification.expected_signature, authorization.signature);
+    }
+
+    #[test]
+    fn marketplace_v2_contracts_project_from_current_marketplace_records() {
+        let mut receipt = receipt();
+        sign_receipt(&mut receipt);
+        receipt.receipt_id = canonical_receipt_id(&receipt).unwrap();
+        let mut quote = quote(&receipt);
+        quote.job_id = Some("job-v2-marketplace-1".to_string());
+        quote.details = json!({
+            "jobId": "job-v2-marketplace-1",
+            "escrowRef": "local://escrow/v2-marketplace-1",
+            "cancellationRules": {
+                "refundWindowSeconds": 600
+            }
+        });
+        sign_service_quote(&mut quote);
+
+        let authorization = authorize_payment(
+            &quote,
+            "0xUser",
+            "runner-1",
+            PaymentAdapterKind::LocalDev,
+            Some("local://payment/v2-auth-1".to_string()),
+        );
+        let payment_v2 = payment_authorization_v2_from_v1(&authorization);
+        let payment_verification = verify_payment_authorization_v2(&payment_v2);
+        assert!(payment_verification.valid, "{payment_verification:#?}");
+        assert_eq!(
+            payment_v2.schema_version,
+            PAYMENT_AUTHORIZATION_V2_SCHEMA_VERSION
+        );
+        assert_eq!(
+            payment_v2.authorization_id,
+            canonical_payment_authorization_v2_id(&payment_v2)
+        );
+        assert_eq!(
+            payment_v2.signature,
+            expected_payment_authorization_v2_signature(&payment_v2)
+        );
+
+        let escrow = create_escrow_record(
+            &authorization,
+            Some(&quote),
+            "market-operator",
+            vec!["bzz://escrow-evidence".to_string()],
+        );
+        let escrow_v2 = escrow_record_v2_from_v1(&escrow);
+        let escrow_verification = verify_escrow_record_v2(&escrow_v2);
+        assert!(escrow_verification.valid, "{escrow_verification:#?}");
+        assert_eq!(escrow_v2.schema_version, ESCROW_RECORD_V2_SCHEMA_VERSION);
+
+        let settlement = settlement_from_verified_receipt_with_payment(
+            &receipt,
+            Some(&quote),
+            Some(&authorization),
+            "0xUser",
+            "runner-1",
+            Some("bzz://receipt".to_string()),
+        )
+        .settlement
+        .unwrap();
+        let settlement_v2 = settlement_record_v2_from_v1(&settlement);
+        let settlement_verification = verify_settlement_record_v2(&settlement_v2);
+        assert!(
+            settlement_verification.valid,
+            "{settlement_verification:#?}"
+        );
+        assert_eq!(
+            settlement_v2.schema_version,
+            SETTLEMENT_RECORD_V2_SCHEMA_VERSION
+        );
+        assert_eq!(settlement_v2.amount_released, settlement.amount);
+        assert_eq!(settlement_v2.amount_refunded, 0.0);
+        assert_eq!(settlement_v2.signatures.len(), 1);
+
+        let dispute = hivemind_receipts::create_dispute_evidence(
+            receipt,
+            "0xUser",
+            DisputeClaimKind::OutputMismatch,
+            "Refund requested after mismatched output",
+            vec!["bzz://dispute-evidence".to_string()],
+        );
+        let dispute_v2 = dispute_record_v2_from_evidence(&dispute);
+        let dispute_verification = verify_dispute_record_v2(&dispute_v2);
+        assert!(dispute_verification.valid, "{dispute_verification:#?}");
+        assert_eq!(dispute_v2.schema_version, DISPUTE_RECORD_V2_SCHEMA_VERSION);
+        assert_eq!(dispute_v2.claim_type, "output-mismatch");
+
+        let audit_event = marketplace_audit_event(
+            MarketplaceAuditEventTypeV1::SettlementRecorded,
+            "market-operator",
+            settlement_v2.settlement_id.clone(),
+            Some("pending".to_string()),
+            "settled",
+            vec![settlement_v2.receipt_ref.clone()],
+        );
+        let audit_verification = verify_marketplace_audit_event(&audit_event);
+        assert!(audit_verification.valid, "{audit_verification:#?}");
+        assert_eq!(
+            audit_event.schema_version,
+            MARKETPLACE_AUDIT_EVENT_SCHEMA_VERSION
+        );
+
+        let mut slashing = SlashingRecordV1 {
+            schema_version: SLASHING_RECORD_SCHEMA_VERSION.to_string(),
+            slashing_id: String::new(),
+            settlement_id: settlement.settlement_id,
+            dispute_id: dispute.dispute_id,
+            receipt_id: dispute.receipt_id,
+            job_id: Some("job-v2-marketplace-1".to_string()),
+            runner_id: "runner-1".to_string(),
+            slashed_party: "runner-1".to_string(),
+            slashed_by: "market-operator".to_string(),
+            amount: 0.01,
+            currency: "xDAI".to_string(),
+            stake_ref: Some("local://stake/runner-1".to_string()),
+            reason_kind: SlashingReasonKindV1::FakeOutput,
+            reason: "Validator evidence showed mismatched output".to_string(),
+            evidence_refs: vec!["bzz://validator-report".to_string()],
+            correctness_assessment_ref: Some("local://correctness/receipt-1".to_string()),
+            failed_methods: vec!["validator-spot-check".to_string()],
+            occurred_at: "2026-06-05T00:00:00Z".to_string(),
+            signature: None,
+        };
+        sign_slashing_record(&mut slashing);
+        let decision = slashing_decision_from_record(&slashing, "market-operator", "P14D");
+        let decision_verification = verify_slashing_decision(&decision);
+        assert!(decision_verification.valid, "{decision_verification:#?}");
+        assert_eq!(decision.schema_version, SLASHING_DECISION_SCHEMA_VERSION);
+        assert_eq!(
+            decision.decision_id,
+            canonical_slashing_decision_id(&decision)
+        );
+    }
+
+    #[test]
+    fn marketplace_v2_contracts_reject_missing_version_and_tampering() {
+        let quote = quote(&receipt());
+        let authorization = authorize_payment(
+            &quote,
+            "0xUser",
+            "runner-1",
+            PaymentAdapterKind::LocalDev,
+            Some("local://payment/v2-auth-2".to_string()),
+        );
+        let payment_v2 = payment_authorization_v2_from_v1(&authorization);
+
+        let mut missing_required = serde_json::to_value(&payment_v2).unwrap();
+        missing_required.as_object_mut().unwrap().remove("payerId");
+        assert!(serde_json::from_value::<PaymentAuthorizationV2>(missing_required).is_err());
+
+        let mut invalid_version = payment_v2.clone();
+        invalid_version.schema_version = "hivemind.payment_authorization.v999".to_string();
+        let invalid_version_verification = verify_payment_authorization_v2(&invalid_version);
+        assert!(!invalid_version_verification.valid);
+        assert!(invalid_version_verification.issues.iter().any(|issue| {
+            issue.path == "$.schemaVersion"
+                || issue.path == "$.authorizationId"
+                || issue.path == "$.signature"
+        }));
+
+        let stable_id = canonical_payment_authorization_v2_id(&payment_v2);
+        let stable_signature = expected_payment_authorization_v2_signature(&payment_v2);
+        assert_eq!(stable_id, payment_v2.authorization_id);
+        assert_eq!(stable_signature, payment_v2.signature);
+        assert_eq!(
+            stable_id,
+            canonical_payment_authorization_v2_id(&payment_v2)
+        );
+        assert_eq!(
+            stable_signature,
+            expected_payment_authorization_v2_signature(&payment_v2)
+        );
+
+        let mut tampered = payment_v2.clone();
+        tampered.amount += 1.0;
+        let tampered_verification = verify_payment_authorization_v2(&tampered);
+        assert!(!tampered_verification.valid);
+        assert!(
+            tampered_verification
+                .issues
+                .iter()
+                .any(|issue| { issue.path == "$.authorizationId" || issue.path == "$.signature" })
+        );
     }
 
     #[test]

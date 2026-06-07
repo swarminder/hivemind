@@ -10,6 +10,7 @@ anyhow.workspace = true
 chrono.workspace = true
 hivemind-core = { path = "../core" }
 hivemind-identity = { path = "../identity" }
+hivemind-policy = { path = "../policy" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

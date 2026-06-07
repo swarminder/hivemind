@@ -1,4 +1,5 @@
 mod api;
+mod docs;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -822,6 +823,11 @@ enum Commands {
         #[command(subcommand)]
         command: VectorCommands,
     },
+    /// Run the local Swarm RAG One ingest, search, and ask pilot.
+    Rag {
+        #[command(subcommand)]
+        command: RagCommands,
+    },
     /// Create, verify, sign, and plan tool/workflow contracts.
     Workflow {
         #[command(subcommand)]
@@ -896,6 +902,11 @@ enum Commands {
         revocations: Option<PathBuf>,
         #[arg(long)]
         receipts_dir: Option<PathBuf>,
+    },
+    /// Generate or check source-derived API and schema inventory docs.
+    Docs {
+        #[command(subcommand)]
+        command: DocsCommands,
     },
     /// Print a JSON Schema for a shared contract.
     Schema {
@@ -980,6 +991,20 @@ enum Commands {
         registry_audit: PathBuf,
         #[arg(long, default_value = "crates/web/static")]
         static_dir: PathBuf,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DocsCommands {
+    /// Write docs/generated/api-routes.md and docs/generated/schemas.md.
+    Generate {
+        #[arg(long, default_value = "docs/generated")]
+        output_dir: PathBuf,
+    },
+    /// Fail if generated API or schema docs are missing or stale.
+    Check {
+        #[arg(long, default_value = "docs/generated")]
+        output_dir: PathBuf,
     },
 }
 
@@ -1814,6 +1839,76 @@ enum VectorCommands {
         vector_store_id: String,
         #[arg(long, default_value = ".swarm-ai-cache/vector")]
         vector_dir: PathBuf,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum RagCommands {
+    /// Upload, chunk, embed, index, and persist a plain text or Markdown document.
+    Ingest {
+        document: PathBuf,
+        #[arg(long)]
+        collection: String,
+        #[arg(long, default_value = "local-dev-rag-owner")]
+        owner: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long, default_value = "text/plain")]
+        content_type: String,
+        #[arg(long, default_value = ".swarm-ai-cache/storage")]
+        storage_dir: PathBuf,
+        #[arg(long, default_value = ".swarm-ai-cache/vector")]
+        vector_dir: PathBuf,
+        #[arg(long, default_value_t = 160)]
+        chunk_tokens: u32,
+        #[arg(long, default_value_t = 24)]
+        overlap_tokens: u32,
+        #[arg(long, default_value = "local://embeddings/mock-deterministic-v1")]
+        embedding_model_ref: String,
+        #[arg(long, default_value_t = 64)]
+        dimensions: u32,
+        #[arg(long)]
+        private: bool,
+        #[arg(long)]
+        require_access_grant: bool,
+        #[arg(long)]
+        force: bool,
+    },
+    /// Search a persisted local Swarm RAG One collection.
+    Search {
+        collection: String,
+        #[arg(long)]
+        query: String,
+        #[arg(long, default_value = "local-dev")]
+        requester: String,
+        #[arg(long, default_value = ".swarm-ai-cache/vector")]
+        vector_dir: PathBuf,
+        #[arg(long, default_value_t = 5)]
+        top_k: u32,
+        #[arg(long, default_value = "standard")]
+        privacy_tier: String,
+        #[arg(long = "access-grant")]
+        access_grants: Vec<String>,
+        #[arg(long)]
+        include_text: bool,
+    },
+    /// Search a persisted local collection and return an extractive answer with citations.
+    Ask {
+        collection: String,
+        #[arg(long)]
+        query: String,
+        #[arg(long, default_value = "local-dev")]
+        requester: String,
+        #[arg(long, default_value = ".swarm-ai-cache/vector")]
+        vector_dir: PathBuf,
+        #[arg(long, default_value_t = 5)]
+        top_k: u32,
+        #[arg(long, default_value = "standard")]
+        privacy_tier: String,
+        #[arg(long = "access-grant")]
+        access_grants: Vec<String>,
+        #[arg(long)]
+        receipt: bool,
     },
 }
 
@@ -3687,6 +3782,7 @@ async fn async_main() -> Result<()> {
         Commands::Eval { command } => eval_command(command).await,
         Commands::Experiment { command } => experiment_command(command).await,
         Commands::Vector { command } => vector_command(command).await,
+        Commands::Rag { command } => rag_command(command).await,
         Commands::Workflow { command } => workflow_command(command).await,
         Commands::Batch { command } => batch_command(command).await,
         Commands::FineTune { command } => fine_tune_command(command).await,
@@ -3732,6 +3828,7 @@ async fn async_main() -> Result<()> {
             )
             .await
         }
+        Commands::Docs { command } => docs_command(command).await,
         Commands::Schema { kind } => schema_command(&kind),
         Commands::Serve {
             host,
@@ -9596,6 +9693,174 @@ async fn vector_command(command: VectorCommands) -> Result<()> {
     }
 }
 
+async fn rag_command(command: RagCommands) -> Result<()> {
+    match command {
+        RagCommands::Ingest {
+            document,
+            collection,
+            owner,
+            title,
+            content_type,
+            storage_dir,
+            vector_dir,
+            chunk_tokens,
+            overlap_tokens,
+            embedding_model_ref,
+            dimensions,
+            private,
+            require_access_grant,
+            force,
+        } => {
+            let snapshot_path = hivemind_vector::rag_snapshot_path(&vector_dir, &collection);
+            if snapshot_path.exists() && !force {
+                anyhow::bail!(
+                    "{} already exists; pass --force to overwrite it",
+                    snapshot_path.display()
+                );
+            }
+            let bytes = tokio::fs::read(&document)
+                .await
+                .with_context(|| format!("failed to read {}", document.display()))?;
+            let text = String::from_utf8(bytes.clone()).with_context(|| {
+                format!(
+                    "{} is not valid UTF-8; Swarm RAG One currently supports text and Markdown",
+                    document.display()
+                )
+            })?;
+            let mut storage = LocalDirectoryStorageProvider::new(storage_dir);
+            let upload = storage
+                .upload_bytes(bytes)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            let access_policy = if private || require_access_grant {
+                hivemind_vector::VectorAccessPolicyV1 {
+                    visibility: if private {
+                        hivemind_vector::VectorAccessVisibility::Private
+                    } else {
+                        hivemind_vector::VectorAccessVisibility::Public
+                    },
+                    privacy_tier: if private {
+                        hivemind_core::PrivacyTier::LocalOnly
+                    } else {
+                        hivemind_core::PrivacyTier::Standard
+                    },
+                    access_grant_required: require_access_grant || private,
+                    license_ref: None,
+                    redaction_policy_ref: None,
+                }
+            } else {
+                hivemind_vector::VectorAccessPolicyV1::default()
+            };
+            let ingest =
+                hivemind_vector::rag_ingest_plain_text(hivemind_vector::RagIngestRequestV1 {
+                    schema_version: hivemind_vector::RAG_INGEST_REQUEST_SCHEMA_VERSION.to_string(),
+                    collection: collection.clone(),
+                    owner,
+                    title: title.unwrap_or_else(|| {
+                        document
+                            .file_stem()
+                            .and_then(|value| value.to_str())
+                            .unwrap_or("document")
+                            .to_string()
+                    }),
+                    document_text: text,
+                    source_ref: Some(upload.reference.clone()),
+                    content_type,
+                    language: None,
+                    metadata: json!({
+                        "sourcePath": document.display().to_string(),
+                        "storageProvider": "local-directory"
+                    }),
+                    sensitivity: if private {
+                        hivemind_vector::DocumentSensitivityV1::Confidential
+                    } else {
+                        hivemind_vector::DocumentSensitivityV1::Public
+                    },
+                    access_policy,
+                    chunking_strategy: hivemind_vector::ChunkingStrategyV1 {
+                        strategy_kind: hivemind_vector::ChunkingStrategyKindV1::FixedTokens,
+                        target_tokens: chunk_tokens,
+                        overlap_tokens,
+                        separators: vec!["\n\n".to_string(), "\n".to_string(), " ".to_string()],
+                        tokenizer_ref: Some("local://tokenizers/whitespace".to_string()),
+                    },
+                    embedding_model_ref,
+                    dimensions,
+                    metric: hivemind_vector::VectorMetric::Cosine,
+                })?;
+            let written_path = hivemind_vector::write_rag_index_snapshot(
+                &vector_dir,
+                &collection,
+                &ingest.snapshot,
+            )?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "snapshotPath": written_path.display().to_string(),
+                    "storageUpload": upload,
+                    "ingest": ingest
+                }))?
+            );
+            Ok(())
+        }
+        RagCommands::Search {
+            collection,
+            query,
+            requester,
+            vector_dir,
+            top_k,
+            privacy_tier,
+            access_grants,
+            include_text,
+        } => {
+            let snapshot = hivemind_vector::read_rag_index_snapshot(&vector_dir, &collection)?;
+            let result = hivemind_vector::rag_search(
+                &snapshot,
+                hivemind_vector::RagSearchRequestV1 {
+                    schema_version: hivemind_vector::RAG_SEARCH_REQUEST_SCHEMA_VERSION.to_string(),
+                    request_id: format!("rag-search-{}", Uuid::new_v4()),
+                    collection,
+                    requester,
+                    query,
+                    top_k,
+                    privacy_tier: parse_privacy_tier(&privacy_tier)?,
+                    access_grant_refs: access_grants,
+                    include_text,
+                },
+            );
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            Ok(())
+        }
+        RagCommands::Ask {
+            collection,
+            query,
+            requester,
+            vector_dir,
+            top_k,
+            privacy_tier,
+            access_grants,
+            receipt,
+        } => {
+            let snapshot = hivemind_vector::read_rag_index_snapshot(&vector_dir, &collection)?;
+            let result = hivemind_vector::rag_ask(
+                &snapshot,
+                hivemind_vector::RagAskRequestV1 {
+                    schema_version: hivemind_vector::RAG_ASK_REQUEST_SCHEMA_VERSION.to_string(),
+                    request_id: format!("rag-ask-{}", Uuid::new_v4()),
+                    collection,
+                    requester,
+                    query,
+                    top_k,
+                    privacy_tier: parse_privacy_tier(&privacy_tier)?,
+                    access_grant_refs: access_grants,
+                    receipt_required: receipt,
+                },
+            );
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            Ok(())
+        }
+    }
+}
+
 async fn workflow_command(command: WorkflowCommands) -> Result<()> {
     match command {
         WorkflowCommands::ToolInit {
@@ -11852,6 +12117,15 @@ fn print_response_with_optional_receipt_capture(
     Ok(())
 }
 
+async fn docs_command(command: DocsCommands) -> Result<()> {
+    let summary = match command {
+        DocsCommands::Generate { output_dir } => docs::generate_docs(&output_dir)?,
+        DocsCommands::Check { output_dir } => docs::check_generated_docs(&output_dir)?,
+    };
+    println!("{}", serde_json::to_string_pretty(&summary)?);
+    Ok(())
+}
+
 fn browser_capabilities(
     webgpu: bool,
     memory_mb: u64,
@@ -12763,6 +13037,12 @@ fn schema_command(kind: &str) -> Result<()> {
         "payment-authorization-verification" => serde_json::to_value(schema_for!(
             hivemind_marketplace::PaymentAuthorizationVerificationV1
         ))?,
+        "payment-authorization-v2" => {
+            serde_json::to_value(schema_for!(hivemind_marketplace::PaymentAuthorizationV2))?
+        }
+        "payment-authorization-v2-verification" => serde_json::to_value(schema_for!(
+            hivemind_marketplace::PaymentAuthorizationV2VerificationV1
+        ))?,
         "payment-authorization-store-summary" => serde_json::to_value(schema_for!(
             hivemind_marketplace::PaymentAuthorizationStoreSummaryV1
         ))?,
@@ -12772,6 +13052,12 @@ fn schema_command(kind: &str) -> Result<()> {
         "escrow-record" => serde_json::to_value(schema_for!(hivemind_marketplace::EscrowRecordV1))?,
         "escrow-record-verification" => serde_json::to_value(schema_for!(
             hivemind_marketplace::EscrowRecordVerificationV1
+        ))?,
+        "escrow-record-v2" => {
+            serde_json::to_value(schema_for!(hivemind_marketplace::EscrowRecordV2))?
+        }
+        "escrow-record-v2-verification" => serde_json::to_value(schema_for!(
+            hivemind_marketplace::EscrowRecordV2VerificationV1
         ))?,
         "escrow-release-request" => {
             serde_json::to_value(schema_for!(hivemind_marketplace::EscrowReleaseRequestV1))?
@@ -12790,6 +13076,18 @@ fn schema_command(kind: &str) -> Result<()> {
         }
         "settlement-event-verification" => serde_json::to_value(schema_for!(
             hivemind_marketplace::SettlementEventVerificationV1
+        ))?,
+        "settlement-record-v2" => {
+            serde_json::to_value(schema_for!(hivemind_marketplace::SettlementRecordV2))?
+        }
+        "settlement-record-v2-verification" => serde_json::to_value(schema_for!(
+            hivemind_marketplace::SettlementRecordV2VerificationV1
+        ))?,
+        "dispute-record-v2" => {
+            serde_json::to_value(schema_for!(hivemind_marketplace::DisputeRecordV2))?
+        }
+        "dispute-record-v2-verification" => serde_json::to_value(schema_for!(
+            hivemind_marketplace::DisputeRecordV2VerificationV1
         ))?,
         "settlement-verification" => {
             serde_json::to_value(schema_for!(hivemind_marketplace::SettlementVerificationV1))?
@@ -12825,6 +13123,12 @@ fn schema_command(kind: &str) -> Result<()> {
         "marketplace-audit-summary" => {
             serde_json::to_value(schema_for!(hivemind_marketplace::MarketplaceAuditSummaryV1))?
         }
+        "marketplace-audit-event" => {
+            serde_json::to_value(schema_for!(hivemind_marketplace::MarketplaceAuditEventV1))?
+        }
+        "marketplace-audit-event-verification" => serde_json::to_value(schema_for!(
+            hivemind_marketplace::MarketplaceAuditEventVerificationV1
+        ))?,
         "settlement-event-lookup" => {
             serde_json::to_value(schema_for!(hivemind_marketplace::SettlementEventLookupV1))?
         }
@@ -12839,6 +13143,12 @@ fn schema_command(kind: &str) -> Result<()> {
         }
         "slashing-record-verification" => serde_json::to_value(schema_for!(
             hivemind_marketplace::SlashingRecordVerificationV1
+        ))?,
+        "slashing-decision" => {
+            serde_json::to_value(schema_for!(hivemind_marketplace::SlashingDecisionV1))?
+        }
+        "slashing-decision-verification" => serde_json::to_value(schema_for!(
+            hivemind_marketplace::SlashingDecisionVerificationV1
         ))?,
         "slashing-build-result" => {
             serde_json::to_value(schema_for!(hivemind_marketplace::SlashingBuildResultV1))?
@@ -13126,6 +13436,32 @@ fn schema_command(kind: &str) -> Result<()> {
         "knowledge-asset-verification" => {
             serde_json::to_value(schema_for!(hivemind_vector::KnowledgeAssetVerificationV1))?
         }
+        "rag-ingest-request" => {
+            serde_json::to_value(schema_for!(hivemind_vector::RagIngestRequestV1))?
+        }
+        "rag-chunk-record" => serde_json::to_value(schema_for!(hivemind_vector::RagChunkRecordV1))?,
+        "rag-embedding-record" => {
+            serde_json::to_value(schema_for!(hivemind_vector::RagEmbeddingRecordV1))?
+        }
+        "rag-index-snapshot" => {
+            serde_json::to_value(schema_for!(hivemind_vector::RagIndexSnapshotV1))?
+        }
+        "rag-ingest-result" => {
+            serde_json::to_value(schema_for!(hivemind_vector::RagIngestResultV1))?
+        }
+        "rag-search-request" => {
+            serde_json::to_value(schema_for!(hivemind_vector::RagSearchRequestV1))?
+        }
+        "rag-search-result" => {
+            serde_json::to_value(schema_for!(hivemind_vector::RagSearchResultV1))?
+        }
+        "rag-ask-request" => serde_json::to_value(schema_for!(hivemind_vector::RagAskRequestV1))?,
+        "rag-answer-receipt" => {
+            serde_json::to_value(schema_for!(hivemind_vector::RagAnswerReceiptV1))?
+        }
+        "rag-answer-result" => {
+            serde_json::to_value(schema_for!(hivemind_vector::RagAnswerResultV1))?
+        }
         "vector-search-request" => {
             serde_json::to_value(schema_for!(hivemind_vector::VectorSearchRequestV1))?
         }
@@ -13155,6 +13491,30 @@ fn schema_command(kind: &str) -> Result<()> {
             serde_json::to_value(schema_for!(hivemind_workflow::WorkflowPlanRequestV1))?
         }
         "workflow-plan" => serde_json::to_value(schema_for!(hivemind_workflow::WorkflowPlanV1))?,
+        "tool-invocation" => {
+            serde_json::to_value(schema_for!(hivemind_workflow::ToolInvocationV1))?
+        }
+        "tool-invocation-verification" => {
+            serde_json::to_value(schema_for!(hivemind_workflow::ToolInvocationVerificationV1))?
+        }
+        "tool-result" => serde_json::to_value(schema_for!(hivemind_workflow::ToolResultV1))?,
+        "tool-result-verification" => {
+            serde_json::to_value(schema_for!(hivemind_workflow::ToolResultVerificationV1))?
+        }
+        "agent-run-state" => serde_json::to_value(schema_for!(hivemind_workflow::AgentRunStateV1))?,
+        "agent-run-state-verification" => {
+            serde_json::to_value(schema_for!(hivemind_workflow::AgentRunStateVerificationV1))?
+        }
+        "human-approval-request" => {
+            serde_json::to_value(schema_for!(hivemind_workflow::HumanApprovalRequestV1))?
+        }
+        "human-approval-request-verification" => serde_json::to_value(schema_for!(
+            hivemind_workflow::HumanApprovalRequestVerificationV1
+        ))?,
+        "memory-write" => serde_json::to_value(schema_for!(hivemind_workflow::MemoryWriteV1))?,
+        "memory-write-verification" => {
+            serde_json::to_value(schema_for!(hivemind_workflow::MemoryWriteVerificationV1))?
+        }
         "workflow-record-store-summary" => {
             serde_json::to_value(schema_for!(hivemind_workflow::WorkflowRecordStoreSummaryV1))?
         }
@@ -13431,6 +13791,12 @@ fn schema_command(kind: &str) -> Result<()> {
         "browser-swarm-retrieve-request" => serde_json::to_value(schema_for!(
             hivemind_weeb3_adapter::BrowserSwarmRetrieveRequestV1
         ))?,
+        "browser-swarm-storage-provider-v6" => serde_json::to_value(schema_for!(
+            hivemind_weeb3_adapter::BrowserSwarmStorageProviderV6
+        ))?,
+        "browser-publish-one-result" => serde_json::to_value(schema_for!(
+            hivemind_weeb3_adapter::BrowserPublishOneResultV1
+        ))?,
         "remote-runner-api" => {
             serde_json::to_value(schema_for!(hivemind_remote_runner::RemoteRunnerApiV1))?
         }
@@ -13463,6 +13829,15 @@ fn schema_command(kind: &str) -> Result<()> {
         ))?,
         "local-runner-sensitive-cache-marker" => {
             serde_json::to_value(schema_for!(hivemind_local_runner::SensitiveCacheMarkerV1))?
+        }
+        "local-model-runner-descriptor" => serde_json::to_value(schema_for!(
+            hivemind_local_runner::LocalModelRunnerDescriptorV1
+        ))?,
+        "local-model-inference-output" => serde_json::to_value(schema_for!(
+            hivemind_local_runner::LocalModelInferenceOutputV1
+        ))?,
+        "ollama-local-model-config" => {
+            serde_json::to_value(schema_for!(hivemind_local_runner::OllamaLocalModelConfigV1))?
         }
         "runner-capability" => {
             serde_json::to_value(schema_for!(hivemind_core::RunnerCapabilityV1))?
@@ -13562,6 +13937,26 @@ fn schema_command(kind: &str) -> Result<()> {
         "route-decision-proof-verification" => serde_json::to_value(schema_for!(
             hivemind_router::RouteDecisionProofVerificationV1
         ))?,
+        "route-plan-v2" => serde_json::to_value(schema_for!(hivemind_router::RoutePlanV2))?,
+        "route-plan-v2-verification" => {
+            serde_json::to_value(schema_for!(hivemind_router::RoutePlanV2VerificationV1))?
+        }
+        "route-failure-analysis" => {
+            serde_json::to_value(schema_for!(hivemind_router::RouteFailureAnalysisV1))?
+        }
+        "route-failure-analysis-verification" => serde_json::to_value(schema_for!(
+            hivemind_router::RouteFailureAnalysisVerificationV1
+        ))?,
+        "capacity-reservation" => {
+            serde_json::to_value(schema_for!(hivemind_router::CapacityReservationV1))?
+        }
+        "capacity-reservation-verification" => serde_json::to_value(schema_for!(
+            hivemind_router::CapacityReservationVerificationV1
+        ))?,
+        "retry-decision" => serde_json::to_value(schema_for!(hivemind_router::RetryDecisionV1))?,
+        "retry-decision-verification" => {
+            serde_json::to_value(schema_for!(hivemind_router::RetryDecisionVerificationV1))?
+        }
         "operational-snapshot-request" => serde_json::to_value(schema_for!(
             hivemind_observability::OperationalMetricSnapshotRequestV1
         ))?,
@@ -13745,7 +14140,7 @@ fn schema_command(kind: &str) -> Result<()> {
             hivemind_receipts::ExecutionReceiptV2VerificationV1
         ))?,
         other => anyhow::bail!(
-            "unknown schema {other}; expected package, package-init-options, package-init-result, package-validation-audit-record, package-validation-audit-store-summary, execution-request, ai-request, ai-request-verification, ai-response, ai-response-verification, ai-execution-plan, ai-input-part, ai-output-part, swarm-ai-error, standard-error-code, standard-error-definition, standard-error-catalog, registry-entry, registry-query, registry-search-audit-record, registry-search-audit-store-summary, registry-snapshot, registry-package-lookup, registry-package-lookup-request, registry-publication-status, registry-feed-status, registry-shard, registry-shard-manifest, registry-shard-manifest-comparison, registry-shard-manifest-comparison-request, registry-shard-manifest-verification, registry-shard-manifest-verification-request, registry-shard-write-result, registry-shard-verification, registry-shard-verification-request, storage-status, storage-retry-policy, storage-transfer-metrics, storage-download, storage-upload, storage-local-inspection, storage-local-cache-summary, storage-feed-pointer, storage-feed-update, storage-feed-resolution, storage-pin-result, identity-keypair, identity-public, identity-signature, identity-signature-verification, access-grant, access-grant-verification, access-grant-store-summary, access-grant-lookup, access-grant-revocation, access-grant-revocation-verification, access-grant-revocation-store-summary, access-grant-revocation-lookup, access-revocation-list, access-revocation-list-verification, access-request, license-policy, policy-decision, trust-policy, trust-policy-verification, permission-manifest, policy-inspection, marketplace-listing, marketplace-listing-verification, runner-offer, runner-offer-verification, hardware-resource-offer, hardware-resource-offer-verification, miner-profile, miner-profile-verification, miner-heartbeat, miner-heartbeat-verification, miner-benchmark-result, miner-benchmark-verification, miner-onboarding-plan, miner-dashboard-input, miner-dashboard-summary, miner-record-store-summary, miner-record-lookup, miner-capacity-input, miner-capacity-signal, marketplace-shortlist-request, runner-offer-score, marketplace-shortlist, service-quote, service-quote-verification, service-quote-store-summary, service-quote-lookup, payment-authorization, payment-authorization-verification, payment-authorization-store-summary, payment-authorization-lookup, settlement-event, settlement-event-verification, settlement-verification, settlement-build-result, settlement-resolution, settlement-resolution-verification, settlement-resolution-result, marketplace-audit-summary, settlement-event-lookup, settlement-resolution-lookup, challenge, validation-report, validation-report-verification, validation-report-store-summary, validation-report-lookup, validation-report-upload, validation-report-download, integrity-evidence, integrity-evidence-init-options, integrity-evidence-verification, integrity-evidence-store-summary, integrity-evidence-lookup, reputation-profile, benchmark-package, benchmark-split, benchmark-privacy-rules, benchmark-expected-runtime, benchmark-suite-init-options, benchmark-suite, benchmark-suite-verification, benchmark-suite-store-summary, benchmark-suite-lookup, dataset-entry, scoring-rule, challenge-commitment-init-options, challenge-commitment, challenge-commitment-verification, challenge-commitment-store-summary, challenge-commitment-lookup, evaluation-result, evaluation-result-verification, evaluation-result-store-summary, evaluation-result-lookup, evaluation-cost-v2, evaluation-timing-v2, evaluation-environment-v2, evaluation-error-v2, evaluation-result-v2-context, evaluation-result-v2-projection-request, evaluation-result-v2, evaluation-result-v2-verification, evaluation-result-v2-store-summary, evaluation-result-v2-lookup, evaluation-leaderboard-entry, evaluation-leaderboard, eval-manifest, eval-manifest-init-options, eval-manifest-verification, eval-run, eval-run-init-options, eval-run-verification, eval-run-planning-request, eval-run-plan, eval-record-store-summary, eval-record-lookup, research-experiment, research-experiment-init-options, research-experiment-verification, research-experiment-store-summary, research-experiment-lookup, research-reproduction-plan, research-experiment-run, research-experiment-run-init-options, research-experiment-run-verification, research-experiment-run-store-summary, research-experiment-run-lookup, vector-store, vector-store-init-options, vector-store-verification, vector-store-manifest-store-summary, vector-store-manifest-lookup, vector-search-request, vector-search-planning-request, vector-search-plan, tool-manifest, tool-manifest-init-options, tool-manifest-verification, workflow-manifest, workflow-manifest-init-options, workflow-manifest-verification, workflow-plan-request, workflow-plan, workflow-record-store-summary, workflow-record-lookup, batch-job, batch-job-init-options, batch-job-verification, batch-execution-plan, fine-tune-job, fine-tune-job-init-options, fine-tune-job-verification, fine-tune-execution-plan, media-job, media-job-init-options, media-job-verification, media-execution-plan, realtime-session, realtime-session-init-options, realtime-session-verification, realtime-connection-plan, moderation-policy, moderation-policy-init-options, moderation-policy-verification, moderation-request, moderation-request-init-options, moderation-request-verification, moderation-plan-request, moderation-plan, moderation-record-store-summary, moderation-record-lookup, governance-policy, governance-policy-init-options, governance-policy-verification, schema-release, schema-release-init-options, schema-release-verification, security-advisory, security-advisory-init-options, security-advisory-verification, security-response-plan, governance-store-summary, governance-record-lookup, compatibility-report, compatibility-certification, receipt-verification, receipt-store-summary, receipt-audit-summary, receipt-lookup, receipt-upload, receipt-download, receipt-redaction-policy, receipt-redaction, receipt-redaction-verification, execution-receipt-v2-verification-request, execution-receipt-v2-verification, receipt-v2-verification-request, receipt-v2-verification, batch-receipt, batch-receipt-verification, batch-receipt-store-summary, batch-receipt-audit-summary, batch-receipt-lookup, partial-receipt, partial-receipt-verification, partial-receipt-stream-summary, receipt-dispute-evidence, receipt-dispute-verification, receipt-dispute-store-summary, receipt-dispute-lookup, browser-runner, browser-capabilities, browser-assessment, browser-prepare-plan, browser-prepared-package, weeb3-adapter, browser-swarm-provider, browser-swarm-config, browser-swarm-status, browser-swarm-retrieval, browser-swarm-compatibility, browser-swarm-security-review, browser-swarm-retrieve-request, remote-runner-api, remote-health, remote-pricing, remote-prepare-request, remote-prepared-package, remote-cancel-request, remote-cancel-result, local-runner-install, local-runner-cache, local-runner-cache-clear, local-runner-sensitive-cache-marker, runner-capability, job-order, job-record, job-store-summary, job-lookup, job-cancellation-request, job-cancellation-result, job-expiration-sweep-request, job-expiration-sweep-result, job-store-audit-request, job-store-audit-summary, job-evidence-link-request, job-evidence-link-result, job-quote, execution-lease-request, execution-lease, streaming-event, stream-event-store, cost-quote, runner-reputation-summary, route-planner-request, route-planner-report, route-execution-trace, route-trace-store-summary, route-trace-lookup, route-decision-store-summary, route-decision-lookup, route-decision-record, route-decision-proof, route-decision-proof-verification, openai-chat-completion-request, openai-chat-completion-response, openai-chat-completion-stream-event, openai-responses-request, openai-responses-response, openai-responses-stream-event, anthropic-message-request, anthropic-message-response, gemini-generate-content-request, gemini-generate-content-response, gemini-live-session-create-request, gemini-live-session, huggingface-inference-request, huggingface-inference-response, openai-file-create-request, openai-file, openai-vector-store-create-request, openai-vector-store-search-request, openai-vector-store-search-response, openai-batch-create-request, openai-batch, openai-fine-tuning-create-request, openai-fine-tuning-job, openai-realtime-session-create-request, openai-realtime-session, openai-eval-create-request, openai-eval, openai-eval-run-create-request, openai-eval-run, openai-image-generation-request, openai-image-edit-request, openai-image-generation-response, openai-audio-transcription-request, openai-audio-transcription-response, openai-audio-speech-request, openai-audio-speech-response, openai-model, openai-model-list, openai-embedding-request, openai-embedding-response, openai-moderation-request, openai-moderation-response, openai-error, publication-record, publication-record-store-summary, publication-record-lookup, package-signature, publication-verification, publish-result, feed-pointer, feed-pointer-store-summary, feed-pointer-lookup, feed-update-result, feed-verification, feed-resolve-request, feed-resolution, or receipt"
+            "unknown schema {other}; expected package, package-init-options, package-init-result, package-validation-audit-record, package-validation-audit-store-summary, execution-request, ai-request, ai-request-verification, ai-response, ai-response-verification, ai-execution-plan, ai-input-part, ai-output-part, swarm-ai-error, standard-error-code, standard-error-definition, standard-error-catalog, registry-entry, registry-query, registry-search-audit-record, registry-search-audit-store-summary, registry-snapshot, registry-package-lookup, registry-package-lookup-request, registry-publication-status, registry-feed-status, registry-shard, registry-shard-manifest, registry-shard-manifest-comparison, registry-shard-manifest-comparison-request, registry-shard-manifest-verification, registry-shard-manifest-verification-request, registry-shard-write-result, registry-shard-verification, registry-shard-verification-request, storage-status, storage-retry-policy, storage-transfer-metrics, storage-download, storage-upload, storage-local-inspection, storage-local-cache-summary, storage-feed-pointer, storage-feed-update, storage-feed-resolution, storage-pin-result, identity-keypair, identity-public, identity-signature, identity-signature-verification, access-grant, access-grant-verification, access-grant-store-summary, access-grant-lookup, access-grant-revocation, access-grant-revocation-verification, access-grant-revocation-store-summary, access-grant-revocation-lookup, access-revocation-list, access-revocation-list-verification, access-request, license-policy, policy-decision, trust-policy, trust-policy-verification, permission-manifest, policy-inspection, marketplace-listing, marketplace-listing-verification, runner-offer, runner-offer-verification, hardware-resource-offer, hardware-resource-offer-verification, miner-profile, miner-profile-verification, miner-heartbeat, miner-heartbeat-verification, miner-benchmark-result, miner-benchmark-verification, miner-onboarding-plan, miner-dashboard-input, miner-dashboard-summary, miner-record-store-summary, miner-record-lookup, miner-capacity-input, miner-capacity-signal, marketplace-shortlist-request, runner-offer-score, marketplace-shortlist, service-quote, service-quote-verification, service-quote-store-summary, service-quote-lookup, payment-authorization, payment-authorization-verification, payment-authorization-v2, payment-authorization-v2-verification, payment-authorization-store-summary, payment-authorization-lookup, escrow-record-v2, escrow-record-v2-verification, settlement-event, settlement-event-verification, settlement-record-v2, settlement-record-v2-verification, dispute-record-v2, dispute-record-v2-verification, settlement-verification, settlement-build-result, settlement-resolution, settlement-resolution-verification, settlement-resolution-result, marketplace-audit-summary, marketplace-audit-event, marketplace-audit-event-verification, settlement-event-lookup, settlement-resolution-lookup, slashing-decision, slashing-decision-verification, challenge, validation-report, validation-report-verification, validation-report-store-summary, validation-report-lookup, validation-report-upload, validation-report-download, integrity-evidence, integrity-evidence-init-options, integrity-evidence-verification, integrity-evidence-store-summary, integrity-evidence-lookup, reputation-profile, benchmark-package, benchmark-split, benchmark-privacy-rules, benchmark-expected-runtime, benchmark-suite-init-options, benchmark-suite, benchmark-suite-verification, benchmark-suite-store-summary, benchmark-suite-lookup, dataset-entry, scoring-rule, challenge-commitment-init-options, challenge-commitment, challenge-commitment-verification, challenge-commitment-store-summary, challenge-commitment-lookup, evaluation-result, evaluation-result-verification, evaluation-result-store-summary, evaluation-result-lookup, evaluation-cost-v2, evaluation-timing-v2, evaluation-environment-v2, evaluation-error-v2, evaluation-result-v2-context, evaluation-result-v2-projection-request, evaluation-result-v2, evaluation-result-v2-verification, evaluation-result-v2-store-summary, evaluation-result-v2-lookup, evaluation-leaderboard-entry, evaluation-leaderboard, eval-manifest, eval-manifest-init-options, eval-manifest-verification, eval-run, eval-run-init-options, eval-run-verification, eval-run-planning-request, eval-run-plan, eval-record-store-summary, eval-record-lookup, research-experiment, research-experiment-init-options, research-experiment-verification, research-experiment-store-summary, research-experiment-lookup, research-reproduction-plan, research-experiment-run, research-experiment-run-init-options, research-experiment-run-verification, research-experiment-run-store-summary, research-experiment-run-lookup, vector-store, vector-store-init-options, vector-store-verification, vector-store-manifest-store-summary, vector-store-manifest-lookup, vector-search-request, vector-search-planning-request, vector-search-plan, tool-manifest, tool-manifest-init-options, tool-manifest-verification, workflow-manifest, workflow-manifest-init-options, workflow-manifest-verification, workflow-plan-request, workflow-plan, tool-invocation, tool-invocation-verification, tool-result, tool-result-verification, agent-run-state, agent-run-state-verification, human-approval-request, human-approval-request-verification, memory-write, memory-write-verification, workflow-record-store-summary, workflow-record-lookup, batch-job, batch-job-init-options, batch-job-verification, batch-execution-plan, fine-tune-job, fine-tune-job-init-options, fine-tune-job-verification, fine-tune-execution-plan, media-job, media-job-init-options, media-job-verification, media-execution-plan, realtime-session, realtime-session-init-options, realtime-session-verification, realtime-connection-plan, moderation-policy, moderation-policy-init-options, moderation-policy-verification, moderation-request, moderation-request-init-options, moderation-request-verification, moderation-plan-request, moderation-plan, moderation-record-store-summary, moderation-record-lookup, governance-policy, governance-policy-init-options, governance-policy-verification, schema-release, schema-release-init-options, schema-release-verification, security-advisory, security-advisory-init-options, security-advisory-verification, security-response-plan, governance-store-summary, governance-record-lookup, compatibility-report, compatibility-certification, receipt-verification, receipt-store-summary, receipt-audit-summary, receipt-lookup, receipt-upload, receipt-download, receipt-redaction-policy, receipt-redaction, receipt-redaction-verification, execution-receipt-v2-verification-request, execution-receipt-v2-verification, receipt-v2-verification-request, receipt-v2-verification, batch-receipt, batch-receipt-verification, batch-receipt-store-summary, batch-receipt-audit-summary, batch-receipt-lookup, partial-receipt, partial-receipt-verification, partial-receipt-stream-summary, receipt-dispute-evidence, receipt-dispute-verification, receipt-dispute-store-summary, receipt-dispute-lookup, browser-runner, browser-capabilities, browser-assessment, browser-prepare-plan, browser-prepared-package, weeb3-adapter, browser-swarm-provider, browser-swarm-config, browser-swarm-status, browser-swarm-retrieval, browser-swarm-compatibility, browser-swarm-security-review, browser-swarm-retrieve-request, remote-runner-api, remote-health, remote-pricing, remote-prepare-request, remote-prepared-package, remote-cancel-request, remote-cancel-result, local-runner-install, local-runner-cache, local-runner-cache-clear, local-runner-sensitive-cache-marker, runner-capability, job-order, job-record, job-store-summary, job-lookup, job-cancellation-request, job-cancellation-result, job-expiration-sweep-request, job-expiration-sweep-result, job-store-audit-request, job-store-audit-summary, job-evidence-link-request, job-evidence-link-result, job-quote, execution-lease-request, execution-lease, streaming-event, stream-event-store, cost-quote, runner-reputation-summary, route-planner-request, route-planner-report, route-execution-trace, route-trace-store-summary, route-trace-lookup, route-decision-store-summary, route-decision-lookup, route-decision-record, route-decision-proof, route-decision-proof-verification, route-plan-v2, route-plan-v2-verification, route-failure-analysis, route-failure-analysis-verification, capacity-reservation, capacity-reservation-verification, retry-decision, retry-decision-verification, openai-chat-completion-request, openai-chat-completion-response, openai-chat-completion-stream-event, openai-responses-request, openai-responses-response, openai-responses-stream-event, anthropic-message-request, anthropic-message-response, gemini-generate-content-request, gemini-generate-content-response, gemini-live-session-create-request, gemini-live-session, huggingface-inference-request, huggingface-inference-response, openai-file-create-request, openai-file, openai-vector-store-create-request, openai-vector-store-search-request, openai-vector-store-search-response, openai-batch-create-request, openai-batch, openai-fine-tuning-create-request, openai-fine-tuning-job, openai-realtime-session-create-request, openai-realtime-session, openai-eval-create-request, openai-eval, openai-eval-run-create-request, openai-eval-run, openai-image-generation-request, openai-image-edit-request, openai-image-generation-response, openai-audio-transcription-request, openai-audio-transcription-response, openai-audio-speech-request, openai-audio-speech-response, openai-model, openai-model-list, openai-embedding-request, openai-embedding-response, openai-moderation-request, openai-moderation-response, openai-error, publication-record, publication-record-store-summary, publication-record-lookup, package-signature, publication-verification, publish-result, feed-pointer, feed-pointer-store-summary, feed-pointer-lookup, feed-update-result, feed-verification, feed-resolve-request, feed-resolution, or receipt"
         ),
     };
     println!("{}", serde_json::to_string_pretty(&schema)?);

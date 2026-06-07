@@ -1142,6 +1142,7 @@ dependencies = [
  "hivemind-policy",
  "hivemind-receipts",
  "hivemind-storage",
+ "reqwest",
  "schemars",
  "serde",
  "serde_json",
@@ -1528,11 +1529,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "hex",
  "hivemind-core",
  "hivemind-identity",
  "schemars",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1559,6 +1562,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1569,6 +1573,7 @@ dependencies = [
  "chrono",
  "hivemind-core",
  "hivemind-identity",
+ "hivemind-policy",
  "schemars",
  "serde",
  "serde_json",

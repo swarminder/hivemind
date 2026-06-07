@@ -16,12 +16,18 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const RUNNER_ID: &str = "local-dev-runner";
 const SENSITIVE_CACHE_MARKER_FILE: &str = ".swarm-ai-sensitive-cache.json";
+pub const LOCAL_MODEL_RUNNER_DESCRIPTOR_SCHEMA_VERSION: &str =
+    "hivemind.local-model-runner-descriptor.v1";
+pub const LOCAL_MODEL_INFERENCE_OUTPUT_SCHEMA_VERSION: &str =
+    "hivemind.local-model-inference-output.v1";
+pub const OLLAMA_LOCAL_MODEL_CONFIG_SCHEMA_VERSION: &str = "hivemind.ollama-local-model-config.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -110,6 +116,119 @@ pub struct LocalRunnerCacheClearResultV1 {
     pub removed_cache_paths: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum LocalModelEngineKindV1 {
+    Mock,
+    Ollama,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LocalModelRunnerDescriptorV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "runnerId")]
+    pub runner_id: String,
+    #[serde(rename = "engineKind")]
+    pub engine_kind: LocalModelEngineKindV1,
+    #[serde(rename = "engineName")]
+    pub engine_name: String,
+    #[serde(
+        rename = "engineVersion",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub engine_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    #[serde(rename = "chatModel", default, skip_serializing_if = "Option::is_none")]
+    pub chat_model: Option<String>,
+    #[serde(
+        rename = "embeddingModel",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub embedding_model: Option<String>,
+    #[serde(
+        rename = "embeddingDimensions",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub embedding_dimensions: Option<u64>,
+    #[serde(rename = "contextWindowTokens", default)]
+    pub context_window_tokens: Option<u64>,
+    #[serde(rename = "supportsChat")]
+    pub supports_chat: bool,
+    #[serde(rename = "supportsEmbeddings")]
+    pub supports_embeddings: bool,
+    #[serde(rename = "supportsStreaming")]
+    pub supports_streaming: bool,
+    pub readiness: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LocalModelInferenceOutputV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    pub engine: LocalModelRunnerDescriptorV1,
+    pub output: Value,
+    #[serde(
+        rename = "inputTokens",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub input_tokens: Option<u64>,
+    #[serde(
+        rename = "outputTokens",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub output_tokens: Option<u64>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct OllamaLocalModelConfigV1 {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: String,
+    #[serde(rename = "baseUrl")]
+    pub base_url: String,
+    #[serde(rename = "chatModel")]
+    pub chat_model: String,
+    #[serde(rename = "embeddingModel")]
+    pub embedding_model: String,
+    #[serde(rename = "timeoutMs")]
+    pub timeout_ms: u64,
+    #[serde(
+        rename = "embeddingDimensions",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub embedding_dimensions: Option<u64>,
+}
+
+pub trait RealLocalModelRunner {
+    fn descriptor(&self) -> LocalModelRunnerDescriptorV1;
+    fn chat(
+        &self,
+        request: &ExecutionRequestV1,
+    ) -> Result<LocalModelInferenceOutputV1, SwarmAiErrorV1>;
+    fn embed(
+        &self,
+        request: &ExecutionRequestV1,
+    ) -> Result<LocalModelInferenceOutputV1, SwarmAiErrorV1>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MockLocalModelRunner;
+
+#[derive(Debug, Clone)]
+pub struct OllamaLocalModelRunner {
+    config: OllamaLocalModelConfigV1,
+    client: reqwest::blocking::Client,
+}
+
 pub fn descriptor() -> RunnerDescriptorV1 {
     RunnerDescriptorV1 {
         schema_version: "swarm-ai.runner-descriptor.v1".to_string(),
@@ -120,7 +239,11 @@ pub fn descriptor() -> RunnerDescriptorV1 {
             "browser-wasm".to_string(),
             "node-cpu".to_string(),
         ],
-        engines: vec!["rust-mock".to_string(), "wasm-mock".to_string()],
+        engines: vec![
+            "rust-mock".to_string(),
+            "wasm-mock".to_string(),
+            "ollama-local".to_string(),
+        ],
         capabilities: vec![
             "embedding".to_string(),
             "classification".to_string(),
@@ -133,6 +256,306 @@ pub fn descriptor() -> RunnerDescriptorV1 {
         },
         queue_depth: 0,
         warm_package_refs: Vec::new(),
+    }
+}
+
+pub fn mock_local_model_runner_descriptor() -> LocalModelRunnerDescriptorV1 {
+    LocalModelRunnerDescriptorV1 {
+        schema_version: LOCAL_MODEL_RUNNER_DESCRIPTOR_SCHEMA_VERSION.to_string(),
+        runner_id: RUNNER_ID.to_string(),
+        engine_kind: LocalModelEngineKindV1::Mock,
+        engine_name: "rust-mock".to_string(),
+        engine_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+        endpoint: None,
+        chat_model: Some("local/mock-chat".to_string()),
+        embedding_model: Some("local/mock-embedding".to_string()),
+        embedding_dimensions: Some(8),
+        context_window_tokens: Some(4096),
+        supports_chat: true,
+        supports_embeddings: true,
+        supports_streaming: true,
+        readiness: "mock".to_string(),
+        warnings: vec![
+            "Deterministic local mock output is for CI and protocol tests, not real inference"
+                .to_string(),
+        ],
+    }
+}
+
+pub fn ollama_config_from_env() -> Option<OllamaLocalModelConfigV1> {
+    let engine = env::var("HIVEMIND_LOCAL_MODEL_ENGINE").ok()?;
+    if !engine.eq_ignore_ascii_case("ollama") {
+        return None;
+    }
+    Some(OllamaLocalModelConfigV1 {
+        schema_version: OLLAMA_LOCAL_MODEL_CONFIG_SCHEMA_VERSION.to_string(),
+        base_url: env::var("HIVEMIND_OLLAMA_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string()),
+        chat_model: env::var("HIVEMIND_OLLAMA_CHAT_MODEL")
+            .or_else(|_| env::var("HIVEMIND_TEST_CHAT_MODEL"))
+            .or_else(|_| env::var("HIVEMIND_OLLAMA_MODEL"))
+            .unwrap_or_else(|_| "llama3.2".to_string()),
+        embedding_model: env::var("HIVEMIND_OLLAMA_EMBED_MODEL")
+            .or_else(|_| env::var("HIVEMIND_TEST_EMBED_MODEL"))
+            .unwrap_or_else(|_| "nomic-embed-text".to_string()),
+        timeout_ms: env::var("HIVEMIND_OLLAMA_TIMEOUT_MS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(30_000),
+        embedding_dimensions: env::var("HIVEMIND_OLLAMA_EMBED_DIMENSIONS")
+            .ok()
+            .and_then(|value| value.parse().ok()),
+    })
+}
+
+pub fn configured_local_model_runner_descriptor() -> LocalModelRunnerDescriptorV1 {
+    if let Some(config) = ollama_config_from_env() {
+        match OllamaLocalModelRunner::new(config) {
+            Ok(runner) => return runner.descriptor(),
+            Err(error) => {
+                let mut descriptor = mock_local_model_runner_descriptor();
+                descriptor.warnings.push(format!(
+                    "Configured Ollama runner could not be initialized and mock mode is active: {}",
+                    error.message
+                ));
+                return descriptor;
+            }
+        }
+    }
+    mock_local_model_runner_descriptor()
+}
+
+impl RealLocalModelRunner for MockLocalModelRunner {
+    fn descriptor(&self) -> LocalModelRunnerDescriptorV1 {
+        mock_local_model_runner_descriptor()
+    }
+
+    fn chat(
+        &self,
+        request: &ExecutionRequestV1,
+    ) -> Result<LocalModelInferenceOutputV1, SwarmAiErrorV1> {
+        let output = chat(&request.input);
+        Ok(LocalModelInferenceOutputV1 {
+            schema_version: LOCAL_MODEL_INFERENCE_OUTPUT_SCHEMA_VERSION.to_string(),
+            engine: self.descriptor(),
+            output,
+            input_tokens: estimate_tokens(&request.input),
+            output_tokens: Some(count_tokens(&input_text(&request.input))),
+            warnings: vec!["mock-output".to_string()],
+        })
+    }
+
+    fn embed(
+        &self,
+        request: &ExecutionRequestV1,
+    ) -> Result<LocalModelInferenceOutputV1, SwarmAiErrorV1> {
+        Ok(LocalModelInferenceOutputV1 {
+            schema_version: LOCAL_MODEL_INFERENCE_OUTPUT_SCHEMA_VERSION.to_string(),
+            engine: self.descriptor(),
+            output: json!({
+                "embedding": deterministic_embedding(&request.input),
+                "model": request.package_id,
+            }),
+            input_tokens: estimate_tokens(&request.input),
+            output_tokens: Some(0),
+            warnings: vec!["mock-output".to_string()],
+        })
+    }
+}
+
+impl OllamaLocalModelRunner {
+    pub fn new(config: OllamaLocalModelConfigV1) -> Result<Self, SwarmAiErrorV1> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_millis(config.timeout_ms))
+            .build()
+            .map_err(|error| {
+                SwarmAiErrorV1::new(
+                    ErrorCode::ExecutionFailed,
+                    "failed to initialize Ollama HTTP client",
+                )
+                .with_details(json!({ "error": error.to_string() }))
+            })?;
+        Ok(Self { config, client })
+    }
+
+    fn endpoint(&self, path: &str) -> String {
+        format!(
+            "{}/{}",
+            self.config.base_url.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        )
+    }
+
+    fn post_json(&self, path: &str, payload: Value) -> Result<Value, SwarmAiErrorV1> {
+        let endpoint = self.endpoint(path);
+        let response = self
+            .client
+            .post(&endpoint)
+            .json(&payload)
+            .send()
+            .map_err(|error| ollama_http_error("request failed", &endpoint, error))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .map_err(|error| ollama_http_error("failed to read response body", &endpoint, error))?;
+        if !status.is_success() {
+            return Err(SwarmAiErrorV1::new(
+                ErrorCode::ExecutionFailed,
+                "Ollama request returned an error status",
+            )
+            .with_details(json!({
+                "endpoint": endpoint,
+                "status": status.as_u16(),
+                "body": body,
+            })));
+        }
+        serde_json::from_str(&body).map_err(|error| {
+            SwarmAiErrorV1::new(
+                ErrorCode::ExecutionFailed,
+                "Ollama response was not valid JSON",
+            )
+            .with_details(json!({
+                "endpoint": endpoint,
+                "error": error.to_string(),
+            }))
+        })
+    }
+
+    fn embedding_via_embed(&self, text: &str) -> Result<Value, SwarmAiErrorV1> {
+        let response = self.post_json(
+            "api/embed",
+            json!({
+                "model": self.config.embedding_model,
+                "input": text,
+            }),
+        )?;
+        let embedding = response
+            .get("embeddings")
+            .and_then(Value::as_array)
+            .and_then(|embeddings| embeddings.first())
+            .cloned()
+            .or_else(|| response.get("embedding").cloned())
+            .ok_or_else(|| {
+                SwarmAiErrorV1::new(
+                    ErrorCode::ExecutionFailed,
+                    "Ollama embed response did not include embeddings",
+                )
+                .with_details(json!({ "response": response }))
+            })?;
+        Ok(json!({
+            "embedding": embedding,
+            "model": self.config.embedding_model,
+        }))
+    }
+
+    fn embedding_via_legacy_embeddings(&self, text: &str) -> Result<Value, SwarmAiErrorV1> {
+        let response = self.post_json(
+            "api/embeddings",
+            json!({
+                "model": self.config.embedding_model,
+                "prompt": text,
+            }),
+        )?;
+        let embedding = response.get("embedding").cloned().ok_or_else(|| {
+            SwarmAiErrorV1::new(
+                ErrorCode::ExecutionFailed,
+                "Ollama legacy embeddings response did not include embedding",
+            )
+            .with_details(json!({ "response": response }))
+        })?;
+        Ok(json!({
+            "embedding": embedding,
+            "model": self.config.embedding_model,
+        }))
+    }
+}
+
+impl RealLocalModelRunner for OllamaLocalModelRunner {
+    fn descriptor(&self) -> LocalModelRunnerDescriptorV1 {
+        LocalModelRunnerDescriptorV1 {
+            schema_version: LOCAL_MODEL_RUNNER_DESCRIPTOR_SCHEMA_VERSION.to_string(),
+            runner_id: RUNNER_ID.to_string(),
+            engine_kind: LocalModelEngineKindV1::Ollama,
+            engine_name: "ollama".to_string(),
+            engine_version: None,
+            endpoint: Some(self.config.base_url.clone()),
+            chat_model: Some(self.config.chat_model.clone()),
+            embedding_model: Some(self.config.embedding_model.clone()),
+            embedding_dimensions: self.config.embedding_dimensions,
+            context_window_tokens: None,
+            supports_chat: true,
+            supports_embeddings: true,
+            supports_streaming: false,
+            readiness: "local".to_string(),
+            warnings: vec![
+                "Ollama local inference is opt-in and depends on the operator's local model installation"
+                    .to_string(),
+            ],
+        }
+    }
+
+    fn chat(
+        &self,
+        request: &ExecutionRequestV1,
+    ) -> Result<LocalModelInferenceOutputV1, SwarmAiErrorV1> {
+        let payload = json!({
+            "model": self.config.chat_model,
+            "messages": ollama_messages(&request.input),
+            "stream": false,
+            "options": ollama_options(&request.input),
+        });
+        let response = self.post_json("api/chat", payload)?;
+        let content = response
+            .get("message")
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_str)
+            .or_else(|| response.get("response").and_then(Value::as_str))
+            .ok_or_else(|| {
+                SwarmAiErrorV1::new(
+                    ErrorCode::ExecutionFailed,
+                    "Ollama chat response did not include assistant content",
+                )
+                .with_details(json!({ "response": response }))
+            })?
+            .to_string();
+        Ok(LocalModelInferenceOutputV1 {
+            schema_version: LOCAL_MODEL_INFERENCE_OUTPUT_SCHEMA_VERSION.to_string(),
+            engine: self.descriptor(),
+            output: json!({
+                "message": {
+                    "role": "assistant",
+                    "content": content
+                },
+                "model": self.config.chat_model,
+            }),
+            input_tokens: response
+                .get("prompt_eval_count")
+                .and_then(Value::as_u64)
+                .or_else(|| estimate_tokens(&request.input)),
+            output_tokens: response
+                .get("eval_count")
+                .and_then(Value::as_u64)
+                .or_else(|| Some(count_tokens(&content))),
+            warnings: Vec::new(),
+        })
+    }
+
+    fn embed(
+        &self,
+        request: &ExecutionRequestV1,
+    ) -> Result<LocalModelInferenceOutputV1, SwarmAiErrorV1> {
+        let text = input_text(&request.input);
+        let output = self
+            .embedding_via_embed(&text)
+            .or_else(|_| self.embedding_via_legacy_embeddings(&text))?;
+        Ok(LocalModelInferenceOutputV1 {
+            schema_version: LOCAL_MODEL_INFERENCE_OUTPUT_SCHEMA_VERSION.to_string(),
+            engine: self.descriptor(),
+            output,
+            input_tokens: estimate_tokens(&request.input),
+            output_tokens: Some(0),
+            warnings: Vec::new(),
+        })
     }
 }
 
@@ -446,13 +869,28 @@ pub async fn execute_with_route(
         );
     };
 
-    let output = match request.task.as_str() {
-        "embedding" => json!({
-            "embedding": deterministic_embedding(&request.input),
-            "model": package.manifest.package_id,
-        }),
-        "classification" => classify(&request.input),
-        "chat" => chat(&request.input),
+    let engine_result = match request.task.as_str() {
+        "embedding" | "chat" => match local_model_inference(&request) {
+            Ok(result) => Some(result),
+            Err(error) => {
+                return failed_response_with_receipt(
+                    &request,
+                    &package,
+                    &artifact.id,
+                    receipt_route_id,
+                    &policy,
+                    &started,
+                    timer,
+                    error,
+                );
+            }
+        },
+        _ => None,
+    };
+
+    let output = match (request.task.as_str(), engine_result.as_ref()) {
+        ("embedding" | "chat", Some(result)) => result.output.clone(),
+        ("classification", _) => classify(&request.input),
         _ => json!({
             "echo": request.input,
             "task": request.task,
@@ -466,9 +904,22 @@ pub async fn execute_with_route(
         load_ms: 1,
         compute_ms: elapsed,
         total_ms: elapsed + 1,
-        input_tokens: estimate_tokens(&request.input),
-        output_tokens: None,
+        input_tokens: engine_result
+            .as_ref()
+            .and_then(|result| result.input_tokens)
+            .or_else(|| estimate_tokens(&request.input)),
+        output_tokens: engine_result
+            .as_ref()
+            .and_then(|result| result.output_tokens),
     };
+    let local_model_runner = engine_result
+        .as_ref()
+        .map(|result| result.engine.clone())
+        .unwrap_or_else(mock_local_model_runner_descriptor);
+    let inference_warnings = engine_result
+        .as_ref()
+        .map(|result| result.warnings.clone())
+        .unwrap_or_default();
     let mut response = ExecutionResponseV1 {
         schema_version: "swarm-ai.execution.response.v1".to_string(),
         request_id: request.request_id.clone(),
@@ -483,6 +934,8 @@ pub async fn execute_with_route(
             "artifactGroup": artifact.id,
             "policy": policy,
             "access": access,
+            "localModelRunner": local_model_runner,
+            "inferenceWarnings": inference_warnings,
         }),
     };
 
@@ -498,6 +951,81 @@ pub async fn execute_with_route(
         route_id: Some(receipt_route_id),
         policy: Some(policy_evidence),
         started_at: &started,
+        finished_at: &finished,
+    });
+    response.receipt_ref = Some(format!("local://receipt/{}", receipt.receipt_id));
+    response.metadata["receipt"] = serde_json::to_value(receipt).unwrap_or_else(|_| json!(null));
+    response
+}
+
+fn local_model_inference(
+    request: &ExecutionRequestV1,
+) -> Result<LocalModelInferenceOutputV1, SwarmAiErrorV1> {
+    if let Some(config) = ollama_config_from_env() {
+        let runner = OllamaLocalModelRunner::new(config)?;
+        return match request.task.as_str() {
+            "chat" => runner.chat(request),
+            "embedding" => runner.embed(request),
+            _ => Err(SwarmAiErrorV1::new(
+                ErrorCode::UnsupportedOperation,
+                "configured local model runner does not support this task",
+            )),
+        };
+    }
+    let runner = MockLocalModelRunner;
+    match request.task.as_str() {
+        "chat" => runner.chat(request),
+        "embedding" => runner.embed(request),
+        _ => Err(SwarmAiErrorV1::new(
+            ErrorCode::UnsupportedOperation,
+            "mock local model runner does not support this task",
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn failed_response_with_receipt(
+    request: &ExecutionRequestV1,
+    package: &LocalPackage,
+    artifact_id: &str,
+    receipt_route_id: String,
+    policy: &PolicyDecisionV1,
+    started: &str,
+    timer: Instant,
+    error: SwarmAiErrorV1,
+) -> ExecutionResponseV1 {
+    let elapsed = timer.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let metrics = ExecutionMetrics {
+        queue_ms: 0,
+        load_ms: 1,
+        compute_ms: elapsed,
+        total_ms: elapsed + 1,
+        input_tokens: estimate_tokens(&request.input),
+        output_tokens: Some(0),
+    };
+    let mut response =
+        ExecutionResponseV1::failed(request.request_id.clone(), error.clone(), metrics);
+    response.metadata = json!({
+        "runnerId": RUNNER_ID,
+        "routeId": receipt_route_id.clone(),
+        "artifactGroup": artifact_id,
+        "policy": policy,
+        "localModelRunner": configured_local_model_runner_descriptor(),
+        "inferenceError": error,
+    });
+
+    let finished = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let policy_evidence = receipt_policy_evidence(policy, finished.clone());
+    let receipt = create_signed_receipt(ReceiptDraft {
+        request,
+        response: &response,
+        manifest: &package.manifest,
+        artifact_group: artifact_id,
+        manifest_hash: &package.manifest_hash,
+        runner_id: RUNNER_ID,
+        route_id: Some(receipt_route_id),
+        policy: Some(policy_evidence),
+        started_at: started,
         finished_at: &finished,
     });
     response.receipt_ref = Some(format!("local://receipt/{}", receipt.receipt_id));
@@ -553,6 +1081,80 @@ fn input_text(input: &Value) -> String {
 
 fn estimate_tokens(input: &Value) -> Option<u64> {
     Some(input_text(input).split_whitespace().count() as u64)
+}
+
+fn count_tokens(text: &str) -> u64 {
+    text.split_whitespace().count() as u64
+}
+
+fn ollama_messages(input: &Value) -> Vec<Value> {
+    let messages = input
+        .get("messages")
+        .and_then(Value::as_array)
+        .map(|messages| {
+            messages
+                .iter()
+                .filter_map(|message| {
+                    let role = message
+                        .get("role")
+                        .and_then(Value::as_str)
+                        .unwrap_or("user");
+                    let content = message_text(message);
+                    (!content.is_empty()).then(|| {
+                        json!({
+                            "role": role,
+                            "content": content,
+                        })
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if messages.is_empty() {
+        vec![json!({
+            "role": "user",
+            "content": input_text(input),
+        })]
+    } else {
+        messages
+    }
+}
+
+fn ollama_options(input: &Value) -> Value {
+    let mut options = serde_json::Map::new();
+    if let Some(temperature) = input.get("temperature").and_then(Value::as_f64) {
+        options.insert("temperature".to_string(), json!(temperature));
+    }
+    if let Some(max_tokens) = input.get("maxOutputTokens").and_then(Value::as_u64) {
+        options.insert("num_predict".to_string(), json!(max_tokens));
+    }
+    Value::Object(options)
+}
+
+fn message_text(message: &Value) -> String {
+    match message.get("content") {
+        Some(Value::String(text)) => text.clone(),
+        Some(Value::Array(parts)) => parts
+            .iter()
+            .filter_map(|part| {
+                part.get("text")
+                    .and_then(Value::as_str)
+                    .or_else(|| part.get("content").and_then(Value::as_str))
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        Some(other) => other.to_string(),
+        None => String::new(),
+    }
+}
+
+fn ollama_http_error(context: &str, endpoint: &str, error: reqwest::Error) -> SwarmAiErrorV1 {
+    SwarmAiErrorV1::new(ErrorCode::ExecutionFailed, format!("Ollama {context}")).with_details(
+        json!({
+            "endpoint": endpoint,
+            "error": error.to_string(),
+        }),
+    )
 }
 
 fn collect_install_records(
@@ -868,6 +1470,137 @@ mod tests {
                 .and_then(|policy| policy.get("decision"))
                 .and_then(Value::as_str),
             Some("ask-user")
+        );
+    }
+
+    #[test]
+    fn mock_local_model_runner_reports_descriptor_and_embedding_shape() {
+        let runner = MockLocalModelRunner;
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-mock-embedding".to_string(),
+            package_ref: "bzz://pkg".to_string(),
+            package_id: "hivemind/mock-embedding".to_string(),
+            package_version: "0.1.0".to_string(),
+            preferred_artifact_group: None,
+            task: "embedding".to_string(),
+            input: json!("hello embeddings"),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let output = runner.embed(&request).unwrap();
+
+        assert_eq!(output.engine.engine_kind, LocalModelEngineKindV1::Mock);
+        assert_eq!(output.engine.embedding_dimensions, Some(8));
+        assert_eq!(
+            output
+                .output
+                .get("embedding")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(8)
+        );
+        assert_eq!(output.warnings, vec!["mock-output"]);
+    }
+
+    #[tokio::test]
+    async fn execute_chat_attaches_local_model_runner_metadata_and_receipt() {
+        let mut manifest = manifest(LicenseType::Open);
+        manifest.capabilities = vec!["chat".to_string()];
+        let package = LocalPackage {
+            root: PathBuf::new(),
+            manifest,
+            manifest_hash: "0".repeat(64),
+            package_ref: "bzz://pkg".to_string(),
+        };
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-chat-local-model".to_string(),
+            package_ref: package.package_ref.clone(),
+            package_id: package.manifest.package_id.clone(),
+            package_version: package.manifest.version.clone(),
+            preferred_artifact_group: None,
+            task: "chat".to_string(),
+            input: json!({
+                "messages": [{"role": "user", "content": "hello local model"}],
+                "text": "hello local model"
+            }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let response = execute(request, package).await;
+
+        assert_eq!(response.status, ExecutionStatus::Succeeded);
+        assert_eq!(
+            response.metadata["localModelRunner"]["engineKind"],
+            json!("mock")
+        );
+        assert_eq!(
+            response.metadata["localModelRunner"]["supportsStreaming"],
+            json!(true)
+        );
+        assert!(
+            response
+                .output
+                .get("message")
+                .and_then(|message| message.get("content"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .contains("hello local model")
+        );
+        let receipt: hivemind_core::ExecutionReceiptV1 =
+            serde_json::from_value(response.metadata["receipt"].clone()).unwrap();
+        assert!(hivemind_receipts::verify_receipt(&receipt).valid);
+    }
+
+    #[test]
+    fn live_ollama_smoke_is_opt_in() {
+        if std::env::var("HIVEMIND_ENABLE_LIVE_OLLAMA_TESTS")
+            .ok()
+            .as_deref()
+            != Some("1")
+        {
+            return;
+        }
+        let config = ollama_config_from_env().expect(
+            "set HIVEMIND_LOCAL_MODEL_ENGINE=ollama with HIVEMIND_ENABLE_LIVE_OLLAMA_TESTS=1",
+        );
+        let runner = OllamaLocalModelRunner::new(config).unwrap();
+        let request = ExecutionRequestV1 {
+            schema_version: "swarm-ai.execution.request.v1".to_string(),
+            request_id: "request-live-ollama-chat".to_string(),
+            package_ref: "bzz://pkg".to_string(),
+            package_id: "hivemind/live-ollama".to_string(),
+            package_version: "0.1.0".to_string(),
+            preferred_artifact_group: None,
+            task: "chat".to_string(),
+            input: json!({
+                "messages": [{"role": "user", "content": "Say hello in one short sentence."}],
+                "text": "Say hello in one short sentence.",
+                "maxOutputTokens": 32
+            }),
+            options: ExecutionOptions::default(),
+            privacy: ExecutionPrivacy::default(),
+            access_grant: None,
+            access_revocation_list: None,
+        };
+
+        let output = runner.chat(&request).unwrap();
+
+        assert_eq!(output.engine.engine_kind, LocalModelEngineKindV1::Ollama);
+        assert!(
+            output
+                .output
+                .get("message")
+                .and_then(|message| message.get("content"))
+                .and_then(Value::as_str)
+                .is_some_and(|content| !content.trim().is_empty())
         );
     }
 
