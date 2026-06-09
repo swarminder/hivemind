@@ -1,0 +1,12 @@
+{
+  "providerUrl": "http://127.0.0.1:8788",
+  "consumerId": "consumer-local",
+  "modelId": "mock-chat",
+  "expectedMaxInputTokens": 4096,
+  "expectedMaxOutputTokens": 1024,
+  "maxOutputTokens": 512,
+  "spendingCap": 25.0,
+  "receiptsDir": ".swarm-ai-cache/provider-consumer/receipts",
+  "sessionStateDir": ".swarm-ai-cache/provider-consumer/sessions",
+  "sessionSummariesDir": ".swarm-ai-cache/provider-consumer/summaries"
+}

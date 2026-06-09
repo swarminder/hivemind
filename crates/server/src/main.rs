@@ -1,5 +1,7 @@
 mod api;
+mod consumer;
 mod docs;
+mod provider;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -22,10 +24,10 @@ use hivemind_storage::{
     BeeHttpStorageProvider, BeeStorageConfig, LocalDirectoryStorageProvider, StorageProvider,
 };
 use schemars::schema_for;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tracing_subscriber::{EnvFilter, fmt};
 use uuid::Uuid;
@@ -992,6 +994,173 @@ enum Commands {
         #[arg(long, default_value = "crates/web/static")]
         static_dir: PathBuf,
     },
+    /// Serve the isolated provider API for direct consumer/provider LAN tests.
+    ServeProvider {
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long)]
+        host: Option<String>,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        security_mode: Option<String>,
+        #[arg(long, env = "HIVEMIND_PROVIDER_BEARER_TOKEN")]
+        bearer_token: Option<String>,
+        #[arg(long)]
+        provider_id: Option<String>,
+        #[arg(long)]
+        display_name: Option<String>,
+        #[arg(long)]
+        model_id: Option<String>,
+        #[arg(long)]
+        model_display_name: Option<String>,
+        #[arg(long)]
+        backend_type: Option<String>,
+        #[arg(long)]
+        backend_model_id: Option<String>,
+        #[arg(long, env = "HIVEMIND_PROVIDER_BACKEND_BASE_URL")]
+        backend_base_url: Option<String>,
+        #[arg(long, env = "HIVEMIND_PROVIDER_BACKEND_API_KEY")]
+        backend_api_key: Option<String>,
+        #[arg(long)]
+        backend_timeout_seconds: Option<u64>,
+        #[arg(long, env = "HIVEMIND_PROVIDER_BACKEND_START_COMMAND")]
+        backend_start_command: Option<String>,
+        #[arg(long = "backend-start-arg", allow_hyphen_values = true)]
+        backend_start_args: Vec<String>,
+        #[arg(long, env = "HIVEMIND_PROVIDER_BACKEND_HEALTH_URL")]
+        backend_health_url: Option<String>,
+        #[arg(long)]
+        max_debt: Option<f64>,
+        #[arg(long)]
+        forgiveness_per_second: Option<f64>,
+        #[arg(long)]
+        price_per_input_token: Option<f64>,
+        #[arg(long)]
+        price_per_output_token: Option<f64>,
+        #[arg(long)]
+        price_per_model_second: Option<f64>,
+        #[arg(long)]
+        price_per_request: Option<f64>,
+        #[arg(long)]
+        state_path: Option<PathBuf>,
+        #[arg(long)]
+        require_signed_requests: bool,
+        #[arg(long)]
+        max_concurrent_sessions: Option<u32>,
+        #[arg(long)]
+        max_concurrent_jobs: Option<u32>,
+        #[arg(long)]
+        max_context_tokens: Option<u64>,
+        #[arg(long)]
+        max_output_tokens: Option<u64>,
+        #[arg(long)]
+        max_prompt_bytes: Option<usize>,
+        #[arg(long)]
+        max_prompt_messages: Option<usize>,
+        #[arg(long)]
+        max_model_starts_per_hour: Option<u32>,
+        #[arg(long)]
+        max_cold_start_seconds: Option<u64>,
+        #[arg(long)]
+        initial_model_state: Option<String>,
+    },
+    /// Connect to a provider URL, open a pseudopayment session, and chat.
+    ProviderChat {
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long = "provider")]
+        provider_url: Option<String>,
+        #[arg(long, env = "HIVEMIND_PROVIDER_BEARER_TOKEN")]
+        bearer_token: Option<String>,
+        #[arg(long)]
+        consumer_id: Option<String>,
+        #[arg(long)]
+        model_id: Option<String>,
+        #[arg(long)]
+        message: Option<String>,
+        #[arg(long)]
+        expected_max_input_tokens: Option<u64>,
+        #[arg(long)]
+        expected_max_output_tokens: Option<u64>,
+        #[arg(long)]
+        max_output_tokens: Option<u64>,
+        #[arg(long)]
+        spending_cap: Option<f64>,
+        #[arg(long)]
+        receipts_dir: Option<PathBuf>,
+        #[arg(long)]
+        session_state_dir: Option<PathBuf>,
+        #[arg(long)]
+        session_summaries_dir: Option<PathBuf>,
+        #[arg(long)]
+        resume_session_id: Option<String>,
+        #[arg(long)]
+        sign_requests: bool,
+        #[arg(long)]
+        show_events: bool,
+        #[arg(long)]
+        close_session: bool,
+    },
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ServeProviderFileConfig {
+    host: Option<String>,
+    port: Option<u16>,
+    security_mode: Option<String>,
+    bearer_token: Option<String>,
+    provider_id: Option<String>,
+    display_name: Option<String>,
+    model_id: Option<String>,
+    model_display_name: Option<String>,
+    backend_type: Option<String>,
+    backend_model_id: Option<String>,
+    backend_base_url: Option<String>,
+    backend_api_key: Option<String>,
+    backend_timeout_seconds: Option<u64>,
+    backend_start_command: Option<String>,
+    backend_start_args: Option<Vec<String>>,
+    backend_health_url: Option<String>,
+    max_debt: Option<f64>,
+    forgiveness_per_second: Option<f64>,
+    price_per_input_token: Option<f64>,
+    price_per_output_token: Option<f64>,
+    price_per_model_second: Option<f64>,
+    price_per_request: Option<f64>,
+    state_path: Option<PathBuf>,
+    require_signed_requests: Option<bool>,
+    max_concurrent_sessions: Option<u32>,
+    max_concurrent_jobs: Option<u32>,
+    max_context_tokens: Option<u64>,
+    max_output_tokens: Option<u64>,
+    max_prompt_bytes: Option<usize>,
+    max_prompt_messages: Option<usize>,
+    max_model_starts_per_hour: Option<u32>,
+    max_cold_start_seconds: Option<u64>,
+    initial_model_state: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProviderChatFileConfig {
+    provider_url: Option<String>,
+    bearer_token: Option<String>,
+    consumer_id: Option<String>,
+    model_id: Option<String>,
+    message: Option<String>,
+    expected_max_input_tokens: Option<u64>,
+    expected_max_output_tokens: Option<u64>,
+    max_output_tokens: Option<u64>,
+    spending_cap: Option<f64>,
+    receipts_dir: Option<PathBuf>,
+    session_state_dir: Option<PathBuf>,
+    session_summaries_dir: Option<PathBuf>,
+    resume_session_id: Option<String>,
+    sign_requests: Option<bool>,
+    show_events: Option<bool>,
+    close_session: Option<bool>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -3912,6 +4081,571 @@ async fn async_main() -> Result<()> {
             })
             .await
         }
+        Commands::ServeProvider {
+            config,
+            host,
+            port,
+            security_mode,
+            bearer_token,
+            provider_id,
+            display_name,
+            model_id,
+            model_display_name,
+            backend_type,
+            backend_model_id,
+            backend_base_url,
+            backend_api_key,
+            backend_timeout_seconds,
+            backend_start_command,
+            backend_start_args,
+            backend_health_url,
+            max_debt,
+            forgiveness_per_second,
+            price_per_input_token,
+            price_per_output_token,
+            price_per_model_second,
+            price_per_request,
+            state_path,
+            require_signed_requests,
+            max_concurrent_sessions,
+            max_concurrent_jobs,
+            max_context_tokens,
+            max_output_tokens,
+            max_prompt_bytes,
+            max_prompt_messages,
+            max_model_starts_per_hour,
+            max_cold_start_seconds,
+            initial_model_state,
+        } => {
+            let mut provider_config = default_serve_provider_config();
+            if let Some(path) = config.as_deref() {
+                let file_config: ServeProviderFileConfig =
+                    load_json_config(path, "provider config")?;
+                apply_serve_provider_file_config(&mut provider_config, file_config)?;
+            }
+            if let Some(value) = host {
+                provider_config.host = value;
+            }
+            if let Some(value) = port {
+                provider_config.port = value;
+            }
+            if let Some(value) = security_mode {
+                provider_config.security_mode = provider::parse_provider_security_mode(&value)?;
+            }
+            if let Some(value) = bearer_token {
+                provider_config.bearer_token = Some(value);
+            }
+            if let Some(value) = provider_id {
+                provider_config.provider_id = value;
+            }
+            if let Some(value) = display_name {
+                provider_config.display_name = value;
+            }
+            if let Some(value) = model_id {
+                provider_config.model_id = value;
+            }
+            if let Some(value) = model_display_name {
+                provider_config.model_display_name = value;
+            }
+            if let Some(value) = backend_type {
+                provider_config.backend_type = provider::parse_provider_backend_type(&value)?;
+            }
+            if let Some(value) = backend_model_id {
+                provider_config.backend_model_id = value;
+            }
+            if let Some(value) = backend_base_url {
+                provider_config.backend_base_url = Some(value);
+            }
+            if let Some(value) = backend_api_key {
+                provider_config.backend_api_key = Some(value);
+            }
+            if let Some(value) = backend_timeout_seconds {
+                provider_config.backend_timeout_seconds = value;
+            }
+            if let Some(value) = backend_start_command {
+                provider_config.backend_start_command = Some(value);
+            }
+            if !backend_start_args.is_empty() {
+                provider_config.backend_start_args = backend_start_args;
+            }
+            if let Some(value) = backend_health_url {
+                provider_config.backend_health_url = Some(value);
+            }
+            if let Some(value) = max_debt {
+                provider_config.max_debt = value;
+            }
+            if let Some(value) = forgiveness_per_second {
+                provider_config.forgiveness_per_second = value;
+            }
+            if let Some(value) = price_per_input_token {
+                provider_config.price_per_input_token = value;
+            }
+            if let Some(value) = price_per_output_token {
+                provider_config.price_per_output_token = value;
+            }
+            if let Some(value) = price_per_model_second {
+                provider_config.price_per_model_second = value;
+            }
+            if let Some(value) = price_per_request {
+                provider_config.price_per_request = value;
+            }
+            if let Some(value) = state_path {
+                provider_config.state_path = value;
+            }
+            if require_signed_requests {
+                provider_config.require_signed_requests = true;
+            }
+            if let Some(value) = max_concurrent_sessions {
+                provider_config.max_concurrent_sessions = value;
+            }
+            if let Some(value) = max_concurrent_jobs {
+                provider_config.max_concurrent_jobs = value;
+            }
+            if let Some(value) = max_context_tokens {
+                provider_config.max_context_tokens = value;
+            }
+            if let Some(value) = max_output_tokens {
+                provider_config.max_output_tokens = value;
+            }
+            if let Some(value) = max_prompt_bytes {
+                provider_config.max_prompt_bytes = value;
+            }
+            if let Some(value) = max_prompt_messages {
+                provider_config.max_prompt_messages = value;
+            }
+            if let Some(value) = max_model_starts_per_hour {
+                provider_config.max_model_starts_per_hour = value;
+            }
+            if let Some(value) = max_cold_start_seconds {
+                provider_config.max_cold_start_seconds = value;
+            }
+            if let Some(value) = initial_model_state {
+                provider_config.initial_model_state =
+                    Some(provider::parse_model_lifecycle_state(&value)?);
+            }
+            provider::serve(provider_config).await
+        }
+        Commands::ProviderChat {
+            config,
+            provider_url,
+            bearer_token,
+            consumer_id,
+            model_id,
+            message,
+            expected_max_input_tokens,
+            expected_max_output_tokens,
+            max_output_tokens,
+            spending_cap,
+            receipts_dir,
+            session_state_dir,
+            session_summaries_dir,
+            resume_session_id,
+            sign_requests,
+            show_events,
+            close_session,
+        } => {
+            let mut chat_config = default_provider_chat_config();
+            if let Some(path) = config.as_deref() {
+                let file_config: ProviderChatFileConfig =
+                    load_json_config(path, "consumer config")?;
+                apply_provider_chat_file_config(&mut chat_config, file_config);
+            }
+            if let Some(value) = provider_url {
+                chat_config.provider_url = value;
+            }
+            if let Some(value) = bearer_token {
+                chat_config.bearer_token = Some(value);
+            }
+            if let Some(value) = consumer_id {
+                chat_config.consumer_id = value;
+            }
+            if let Some(value) = model_id {
+                chat_config.model_id = Some(value);
+            }
+            if let Some(value) = message {
+                chat_config.message = Some(value);
+            }
+            if let Some(value) = expected_max_input_tokens {
+                chat_config.expected_max_input_tokens = value;
+            }
+            if let Some(value) = expected_max_output_tokens {
+                chat_config.expected_max_output_tokens = value;
+            }
+            if let Some(value) = max_output_tokens {
+                chat_config.max_output_tokens = value;
+            }
+            if let Some(value) = spending_cap {
+                chat_config.spending_cap = Some(value);
+            }
+            if let Some(value) = receipts_dir {
+                chat_config.receipts_dir = value;
+            }
+            if let Some(value) = session_state_dir {
+                chat_config.session_state_dir = value;
+            }
+            if let Some(value) = session_summaries_dir {
+                chat_config.session_summaries_dir = value;
+            }
+            if let Some(value) = resume_session_id {
+                chat_config.resume_session_id = Some(value);
+            }
+            if sign_requests {
+                chat_config.sign_requests = true;
+            }
+            if show_events {
+                chat_config.show_events = true;
+            }
+            if close_session {
+                chat_config.close_session = true;
+            }
+            consumer::chat(chat_config).await
+        }
+    }
+}
+
+fn default_serve_provider_config() -> provider::ServeProviderConfig {
+    provider::ServeProviderConfig {
+        host: "127.0.0.1".to_string(),
+        port: 8788,
+        security_mode: hivemind_core::ProviderSecurityMode::LocalDev,
+        bearer_token: None,
+        provider_id: "provider-local".to_string(),
+        display_name: "Local Hivemind Provider".to_string(),
+        model_id: "mock-chat".to_string(),
+        model_display_name: "Mock Chat".to_string(),
+        backend_type: hivemind_core::ModelBackendType::Mock,
+        backend_model_id: "mock-chat".to_string(),
+        backend_base_url: None,
+        backend_api_key: None,
+        backend_timeout_seconds: 60,
+        backend_start_command: None,
+        backend_start_args: Vec::new(),
+        backend_health_url: None,
+        max_debt: 1000.0,
+        forgiveness_per_second: 10.0,
+        price_per_input_token: 0.001,
+        price_per_output_token: 0.002,
+        price_per_model_second: 0.01,
+        price_per_request: 0.1,
+        state_path: PathBuf::from(".swarm-ai-cache/provider/state.json"),
+        require_signed_requests: false,
+        max_concurrent_sessions: 32,
+        max_concurrent_jobs: 1,
+        max_context_tokens: 8192,
+        max_output_tokens: 1024,
+        max_prompt_bytes: 262_144,
+        max_prompt_messages: 64,
+        max_model_starts_per_hour: 60,
+        max_cold_start_seconds: 1,
+        initial_model_state: None,
+    }
+}
+
+fn default_provider_chat_config() -> consumer::ProviderChatConfig {
+    consumer::ProviderChatConfig {
+        provider_url: "http://127.0.0.1:8788".to_string(),
+        bearer_token: None,
+        consumer_id: "consumer-local".to_string(),
+        model_id: None,
+        message: None,
+        expected_max_input_tokens: 4096,
+        expected_max_output_tokens: 1024,
+        max_output_tokens: 512,
+        spending_cap: None,
+        receipts_dir: PathBuf::from(".swarm-ai-cache/provider-consumer/receipts"),
+        session_state_dir: PathBuf::from(".swarm-ai-cache/provider-consumer/sessions"),
+        session_summaries_dir: PathBuf::from(".swarm-ai-cache/provider-consumer/summaries"),
+        resume_session_id: None,
+        sign_requests: false,
+        show_events: false,
+        close_session: false,
+    }
+}
+
+fn load_json_config<T: serde::de::DeserializeOwned>(path: &Path, label: &str) -> Result<T> {
+    let bytes = std::fs::read(path)
+        .with_context(|| format!("failed to read {label} {}", path.display()))?;
+    serde_json::from_slice(&bytes)
+        .with_context(|| format!("failed to parse {label} JSON {}", path.display()))
+}
+
+fn apply_serve_provider_file_config(
+    config: &mut provider::ServeProviderConfig,
+    file: ServeProviderFileConfig,
+) -> Result<()> {
+    if let Some(value) = file.host {
+        config.host = value;
+    }
+    if let Some(value) = file.port {
+        config.port = value;
+    }
+    if let Some(value) = file.security_mode {
+        config.security_mode = provider::parse_provider_security_mode(&value)?;
+    }
+    if let Some(value) = file.bearer_token {
+        config.bearer_token = Some(value);
+    }
+    if let Some(value) = file.provider_id {
+        config.provider_id = value;
+    }
+    if let Some(value) = file.display_name {
+        config.display_name = value;
+    }
+    if let Some(value) = file.model_id {
+        config.model_id = value;
+    }
+    if let Some(value) = file.model_display_name {
+        config.model_display_name = value;
+    }
+    if let Some(value) = file.backend_type {
+        config.backend_type = provider::parse_provider_backend_type(&value)?;
+    }
+    if let Some(value) = file.backend_model_id {
+        config.backend_model_id = value;
+    }
+    if let Some(value) = file.backend_base_url {
+        config.backend_base_url = Some(value);
+    }
+    if let Some(value) = file.backend_api_key {
+        config.backend_api_key = Some(value);
+    }
+    if let Some(value) = file.backend_timeout_seconds {
+        config.backend_timeout_seconds = value;
+    }
+    if let Some(value) = file.backend_start_command {
+        config.backend_start_command = Some(value);
+    }
+    if let Some(value) = file.backend_start_args {
+        config.backend_start_args = value;
+    }
+    if let Some(value) = file.backend_health_url {
+        config.backend_health_url = Some(value);
+    }
+    if let Some(value) = file.max_debt {
+        config.max_debt = value;
+    }
+    if let Some(value) = file.forgiveness_per_second {
+        config.forgiveness_per_second = value;
+    }
+    if let Some(value) = file.price_per_input_token {
+        config.price_per_input_token = value;
+    }
+    if let Some(value) = file.price_per_output_token {
+        config.price_per_output_token = value;
+    }
+    if let Some(value) = file.price_per_model_second {
+        config.price_per_model_second = value;
+    }
+    if let Some(value) = file.price_per_request {
+        config.price_per_request = value;
+    }
+    if let Some(value) = file.state_path {
+        config.state_path = value;
+    }
+    if let Some(value) = file.require_signed_requests {
+        config.require_signed_requests = value;
+    }
+    if let Some(value) = file.max_concurrent_sessions {
+        config.max_concurrent_sessions = value;
+    }
+    if let Some(value) = file.max_concurrent_jobs {
+        config.max_concurrent_jobs = value;
+    }
+    if let Some(value) = file.max_context_tokens {
+        config.max_context_tokens = value;
+    }
+    if let Some(value) = file.max_output_tokens {
+        config.max_output_tokens = value;
+    }
+    if let Some(value) = file.max_prompt_bytes {
+        config.max_prompt_bytes = value;
+    }
+    if let Some(value) = file.max_prompt_messages {
+        config.max_prompt_messages = value;
+    }
+    if let Some(value) = file.max_model_starts_per_hour {
+        config.max_model_starts_per_hour = value;
+    }
+    if let Some(value) = file.max_cold_start_seconds {
+        config.max_cold_start_seconds = value;
+    }
+    if let Some(value) = file.initial_model_state {
+        config.initial_model_state = Some(provider::parse_model_lifecycle_state(&value)?);
+    }
+    Ok(())
+}
+
+fn apply_provider_chat_file_config(
+    config: &mut consumer::ProviderChatConfig,
+    file: ProviderChatFileConfig,
+) {
+    if let Some(value) = file.provider_url {
+        config.provider_url = value;
+    }
+    if let Some(value) = file.bearer_token {
+        config.bearer_token = Some(value);
+    }
+    if let Some(value) = file.consumer_id {
+        config.consumer_id = value;
+    }
+    if let Some(value) = file.model_id {
+        config.model_id = Some(value);
+    }
+    if let Some(value) = file.message {
+        config.message = Some(value);
+    }
+    if let Some(value) = file.expected_max_input_tokens {
+        config.expected_max_input_tokens = value;
+    }
+    if let Some(value) = file.expected_max_output_tokens {
+        config.expected_max_output_tokens = value;
+    }
+    if let Some(value) = file.max_output_tokens {
+        config.max_output_tokens = value;
+    }
+    if let Some(value) = file.spending_cap {
+        config.spending_cap = Some(value);
+    }
+    if let Some(value) = file.receipts_dir {
+        config.receipts_dir = value;
+    }
+    if let Some(value) = file.session_state_dir {
+        config.session_state_dir = value;
+    }
+    if let Some(value) = file.session_summaries_dir {
+        config.session_summaries_dir = value;
+    }
+    if let Some(value) = file.resume_session_id {
+        config.resume_session_id = Some(value);
+    }
+    if let Some(value) = file.sign_requests {
+        config.sign_requests = value;
+    }
+    if let Some(value) = file.show_events {
+        config.show_events = value;
+    }
+    if let Some(value) = file.close_session {
+        config.close_session = value;
+    }
+}
+
+#[cfg(test)]
+mod provider_consumer_config_tests {
+    use super::*;
+
+    #[test]
+    fn provider_file_config_merges_lan_managed_backend() {
+        let file: ServeProviderFileConfig = serde_json::from_value(serde_json::json!({
+            "host": "0.0.0.0",
+            "port": 9797,
+            "securityMode": "lan-test",
+            "bearerToken": "shared-test-token",
+            "providerId": "provider-lan",
+            "modelId": "llama-lan",
+            "modelDisplayName": "LAN Llama",
+            "backendType": "openai-compatible-http",
+            "backendModelId": "llama3.2",
+            "backendBaseUrl": "http://127.0.0.1:11434/v1",
+            "backendStartCommand": "ollama",
+            "backendStartArgs": ["serve"],
+            "backendHealthUrl": "http://127.0.0.1:11434/api/tags",
+            "maxDebt": 25.0,
+            "maxConcurrentJobs": 2,
+            "initialModelState": "available_cold"
+        }))
+        .unwrap();
+        let mut config = default_serve_provider_config();
+
+        apply_serve_provider_file_config(&mut config, file).unwrap();
+
+        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.port, 9797);
+        assert_eq!(
+            config.security_mode,
+            hivemind_core::ProviderSecurityMode::LanTest
+        );
+        assert_eq!(config.bearer_token.as_deref(), Some("shared-test-token"));
+        assert_eq!(
+            config.backend_type,
+            hivemind_core::ModelBackendType::OpenAiCompatibleHttp
+        );
+        assert_eq!(config.backend_start_command.as_deref(), Some("ollama"));
+        assert_eq!(config.backend_start_args, vec!["serve"]);
+        assert_eq!(config.max_debt, 25.0);
+        assert_eq!(config.max_concurrent_jobs, 2);
+        assert_eq!(
+            config.initial_model_state,
+            Some(hivemind_core::ModelLifecycleStateKind::AvailableCold)
+        );
+    }
+
+    #[test]
+    fn provider_chat_file_config_merges_consumer_defaults() {
+        let file: ProviderChatFileConfig = serde_json::from_value(serde_json::json!({
+            "providerUrl": "http://provider-lan:8788",
+            "bearerToken": "shared-test-token",
+            "consumerId": "consumer-lan",
+            "modelId": "llama-lan",
+            "message": "hello from config",
+            "expectedMaxInputTokens": 2048,
+            "expectedMaxOutputTokens": 256,
+            "maxOutputTokens": 128,
+            "spendingCap": 12.5,
+            "receiptsDir": ".swarm-ai-cache/test-receipts",
+            "sessionStateDir": ".swarm-ai-cache/test-sessions",
+            "sessionSummariesDir": ".swarm-ai-cache/test-summaries",
+            "resumeSessionId": "session-1",
+            "signRequests": true,
+            "showEvents": true,
+            "closeSession": true
+        }))
+        .unwrap();
+        let mut config = default_provider_chat_config();
+
+        apply_provider_chat_file_config(&mut config, file);
+
+        assert_eq!(config.provider_url, "http://provider-lan:8788");
+        assert_eq!(config.bearer_token.as_deref(), Some("shared-test-token"));
+        assert_eq!(config.consumer_id, "consumer-lan");
+        assert_eq!(config.model_id.as_deref(), Some("llama-lan"));
+        assert_eq!(config.message.as_deref(), Some("hello from config"));
+        assert_eq!(config.expected_max_input_tokens, 2048);
+        assert_eq!(config.expected_max_output_tokens, 256);
+        assert_eq!(config.max_output_tokens, 128);
+        assert_eq!(config.spending_cap, Some(12.5));
+        assert_eq!(
+            config.receipts_dir,
+            PathBuf::from(".swarm-ai-cache/test-receipts")
+        );
+        assert_eq!(
+            config.session_state_dir,
+            PathBuf::from(".swarm-ai-cache/test-sessions")
+        );
+        assert_eq!(
+            config.session_summaries_dir,
+            PathBuf::from(".swarm-ai-cache/test-summaries")
+        );
+        assert_eq!(config.resume_session_id.as_deref(), Some("session-1"));
+        assert!(config.sign_requests);
+        assert!(config.show_events);
+        assert!(config.close_session);
+    }
+
+    #[test]
+    fn load_json_config_reads_config_file() {
+        let path = std::env::temp_dir().join(format!(
+            "hivemind-provider-config-test-{}.json",
+            Uuid::new_v4()
+        ));
+        std::fs::write(&path, br#"{"providerUrl":"http://127.0.0.1:8788"}"#).unwrap();
+
+        let loaded: ProviderChatFileConfig = load_json_config(&path, "consumer config").unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(
+            loaded.provider_url.as_deref(),
+            Some("http://127.0.0.1:8788")
+        );
     }
 }
 
@@ -12617,6 +13351,66 @@ fn schema_command(kind: &str) -> Result<()> {
             hivemind_package::PackageValidationAuditStoreSummaryV1
         ))?,
         "execution-request" => serde_json::to_value(schema_for!(ExecutionRequestV1))?,
+        "provider-identity" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderIdentityV1))?
+        }
+        "provider-model-offer" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderModelOfferV1))?
+        }
+        "provider-health" => serde_json::to_value(schema_for!(hivemind_core::ProviderHealthV1))?,
+        "model-lifecycle-state" => {
+            serde_json::to_value(schema_for!(hivemind_core::ModelLifecycleStateV1))?
+        }
+        "provider-model-start-request" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderModelStartRequestV1))?
+        }
+        "provider-model-stop-request" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderModelStopRequestV1))?
+        }
+        "provider-quote-request" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderQuoteRequestV1))?
+        }
+        "provider-quote" => serde_json::to_value(schema_for!(hivemind_core::ProviderQuoteV1))?,
+        "provider-session-open-request" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderSessionOpenRequestV1))?
+        }
+        "provider-session-close-request" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderSessionCloseRequestV1))?
+        }
+        "provider-session" => serde_json::to_value(schema_for!(hivemind_core::ProviderSessionV1))?,
+        "provider-chat-request" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderChatRequestV1))?
+        }
+        "provider-job-cancel-request" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderJobCancelRequestV1))?
+        }
+        "provider-job-cancel-response" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderJobCancelResponseV1))?
+        }
+        "provider-stream-event" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderStreamEventV1))?
+        }
+        "provider-chat-receipt" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderChatReceiptV1))?
+        }
+        "provider-session-summary" => {
+            serde_json::to_value(schema_for!(hivemind_core::ProviderSessionSummaryV1))?
+        }
+        "pseudo-payment-policy" => {
+            serde_json::to_value(schema_for!(hivemind_core::PseudoPaymentPolicyV1))?
+        }
+        "pseudo-payment-session" => {
+            serde_json::to_value(schema_for!(hivemind_core::PseudoPaymentSessionV1))?
+        }
+        "pseudo-payment-state" => {
+            serde_json::to_value(schema_for!(hivemind_core::PseudoPaymentStateV1))?
+        }
+        "pseudo-ledger-event" => {
+            serde_json::to_value(schema_for!(hivemind_core::PseudoLedgerEventV1))?
+        }
+        "signed-request-envelope" => {
+            serde_json::to_value(schema_for!(hivemind_core::SignedRequestEnvelopeV1))?
+        }
         "ai-request" => serde_json::to_value(schema_for!(hivemind_core::AiRequestV1))?,
         "ai-workload" => serde_json::to_value(schema_for!(hivemind_core::AIWorkloadV1))?,
         "ai-workload-verification" => {

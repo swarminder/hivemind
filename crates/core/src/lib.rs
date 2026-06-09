@@ -7,6 +7,7 @@ pub mod interface;
 pub mod job;
 pub mod manifest;
 pub mod policy;
+pub mod provider;
 pub mod receipt;
 pub mod registry;
 pub mod routing;
@@ -98,6 +99,35 @@ pub use manifest::{
 };
 pub use policy::{
     PolicyDecision, PolicyDecisionV1, evaluate_package_policy, policy_execution_block_reason,
+};
+pub use provider::{
+    MODEL_LIFECYCLE_STATE_SCHEMA_VERSION, ModelBackendFeature, ModelBackendType,
+    ModelColdStartPolicyV1, ModelLifecycleStateKind, ModelLifecycleStateV1,
+    PROVIDER_CHAT_RECEIPT_SCHEMA_VERSION, PROVIDER_CHAT_REQUEST_SCHEMA_VERSION,
+    PROVIDER_HEALTH_SCHEMA_VERSION, PROVIDER_IDENTITY_SCHEMA_VERSION,
+    PROVIDER_JOB_CANCEL_REQUEST_SCHEMA_VERSION, PROVIDER_JOB_CANCEL_RESPONSE_SCHEMA_VERSION,
+    PROVIDER_MODEL_OFFER_SCHEMA_VERSION, PROVIDER_MODEL_START_REQUEST_SCHEMA_VERSION,
+    PROVIDER_MODEL_STOP_REQUEST_SCHEMA_VERSION, PROVIDER_QUOTE_REQUEST_SCHEMA_VERSION,
+    PROVIDER_QUOTE_SCHEMA_VERSION, PROVIDER_SESSION_CLOSE_REQUEST_SCHEMA_VERSION,
+    PROVIDER_SESSION_OPEN_REQUEST_SCHEMA_VERSION, PROVIDER_SESSION_SCHEMA_VERSION,
+    PROVIDER_SESSION_SUMMARY_SCHEMA_VERSION, PROVIDER_STREAM_EVENT_SCHEMA_VERSION,
+    PSEUDO_LEDGER_EVENT_SCHEMA_VERSION, PSEUDO_PAYMENT_POLICY_SCHEMA_VERSION,
+    PSEUDO_PAYMENT_SESSION_SCHEMA_VERSION, PSEUDO_PAYMENT_STATE_SCHEMA_VERSION, ProviderAuthMode,
+    ProviderChatReceiptV1, ProviderChatRequestV1, ProviderHealthV1, ProviderIdentityV1,
+    ProviderJobCancelRequestV1, ProviderJobCancelResponseV1, ProviderJobCancellationStatus,
+    ProviderModelOfferV1, ProviderModelStartRequestV1, ProviderModelStopRequestV1,
+    ProviderPaymentMode, ProviderPriceTermsV1, ProviderQuoteRequestV1, ProviderQuoteV1,
+    ProviderReadinessLabel, ProviderSecurityError, ProviderSecurityMode,
+    ProviderSessionCloseRequestV1, ProviderSessionLimitsV1, ProviderSessionOpenRequestV1,
+    ProviderSessionStatus, ProviderSessionSummaryV1, ProviderSessionV1, ProviderStatus,
+    ProviderStreamEventType, ProviderStreamEventV1, ProviderUsageV1, PseudoLedgerEventType,
+    PseudoLedgerEventV1, PseudoPaymentError, PseudoPaymentPolicyV1, PseudoPaymentSessionV1,
+    PseudoPaymentStateV1, SIGNED_REQUEST_ENVELOPE_SCHEMA_VERSION, SignedRequestEnvelopeV1,
+    UsageConfidence, apply_pseudo_payment_debit, apply_pseudo_payment_forgiveness,
+    apply_pseudo_payment_session_close, has_external_provider_auth, is_loopback_bind_host,
+    provider_chat_usage_cost, provider_security_mode_allows_bind, pseudo_payment_state,
+    validate_provider_model_offer, validate_provider_quote, validate_pseudo_payment_policy,
+    validate_signed_request_envelope,
 };
 pub use receipt::{
     BillingInfo, ExecutionReceiptCostV2, ExecutionReceiptErrorV2, ExecutionReceiptLeaseContextV2,

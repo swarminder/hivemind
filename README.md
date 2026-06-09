@@ -19,6 +19,7 @@ Hivemind can currently:
 - Project route decisions into V2 route plans with selected and rejected runner explanations, capacity reservations, signed failure analyses, and retry decisions for timeout, privacy/policy, quote-expiry, and overload cases.
 - Execute deterministic local-development runner flows and produce signed receipts, stream events, partial receipts, job lifecycle records, and audit summaries.
 - Run OpenAI-compatible chat and embedding requests through the local execution and receipt path with a model-runner layer: deterministic mock inference by default, and Ollama-backed local inference behind explicit environment opt-in.
+- Run an isolated provider/consumer LLM pilot: `serve-provider` advertises one configured model offer over a local or authenticated LAN/test endpoint with model lifecycle, managed start/stop, session, prompt, context, output, and concurrency limits; `provider-chat` connects to a known provider URL, requests a quote, opens, resumes, or closes a pseudopayment session, starts a cold model when policy allows it, asks chat questions, saves receipts and closed-session summaries, and records local session metadata while the provider persists model lifecycle, sessions, ledger events, issued receipts, and closed-session summaries.
 - Expose OpenAI-compatible and provider-shaped API surfaces for chat, Responses, embeddings, files, vector stores, batches, fine-tuning, realtime sessions, evals, image, audio, moderation, Anthropic-style, Gemini-style, and Hugging Face-style requests.
 - Model marketplace listing, shortlisting, quote, payment authorization, escrow, settlement, dispute, refund, rejection, audit, and slashing records as local signed contracts, including V2 payment authorization, escrow, settlement, dispute, audit-event, and slashing-decision interface objects for downstream teams.
 - Model AI miner participation through hardware-resource offers, miner profiles, heartbeats, benchmark evidence, onboarding plans, and dashboard summaries.
@@ -35,6 +36,7 @@ The complete API and schema inventories are generated from source code:
 
 - [API routes](docs/generated/api-routes.md)
 - [Schema commands](docs/generated/schemas.md)
+- [Provider/consumer quickstart](docs/provider-consumer/quickstart.md)
 
 Regenerate and verify them with:
 
@@ -125,6 +127,24 @@ $env:HIVEMIND_OLLAMA_EMBED_MODEL="nomic-embed-text"
 cargo run -p hivemind-server -- serve --port 8787
 ```
 
+Run the direct provider/consumer pilot with a mock backend:
+
+```powershell
+# Terminal 1
+cargo run -p hivemind-server -- serve-provider --config .\examples\provider\mock-provider.json
+
+# Terminal 2
+cargo run -p hivemind-server -- provider-chat --config .\examples\consumer\local-chat.json --message "hello provider"
+```
+
+Resume the same provider session after a provider restart:
+
+```powershell
+cargo run -p hivemind-server -- provider-chat --provider http://127.0.0.1:8788 --resume-session-id <provider-session-id> --message "continue"
+```
+
+Provider mode refuses unsafe external serving unless an explicit security mode and auth policy are configured. It supports bearer-token LAN auth and an MVP local-dev signed request envelope mode with body-hash, expiry, and nonce replay checks. Pseudopayment is local-dev/test accounting: usage increases session debt, forgiveness lowers it over time, and the provider can refuse work when the debt ceiling is reached. Provider model lifecycle, sessions, issued receipts, and final closed-session summaries survive restart through the configured state file and can be queried through the provider API; `provider-chat --close-session` also stores that final summary locally. For OpenAI-compatible backends, the provider can optionally start and stop an operator-configured managed process without shell interpolation; stop is refused while jobs are active and is not exposed for unmanaged external backends. It is not real settlement or production custody.
+
 Start the local API and dashboard:
 
 ```powershell
@@ -154,13 +174,14 @@ Most current surfaces are `local`, `gateway`, or `browser-test`. The generated r
 
 ## Development Direction
 
-The next engineering priorities from the v0.6 writeups are:
+The next engineering priorities from the current writeups are:
 
 1. Keep generated route and schema inventories current.
-2. Connect the browser Weeb-3 publish-one pilot to live browser-runtime tests behind explicit wallet, Bee, and spend opt-in flags.
-3. Expand the opt-in Ollama local inference pilot with field support checks, rejection behavior, streaming conformance, and additional model engines.
-4. Expand Swarm RAG One with live embedding backends, browser file selection, richer file parsing, and OpenAI file-search compatibility behavior.
-5. Continue contract alignment for generic extensions and production marketplace operations beyond the local V2 interface objects.
-6. Add production readiness gates for labels, fixtures, operational evidence, and documentation freshness.
+2. Harden the provider/consumer pilot with live Ollama or vLLM smoke tests, real streaming transport, cancellation, signed request replay protection, and clearer LAN demo docs.
+3. Connect the browser Weeb-3 publish-one pilot to live browser-runtime tests behind explicit wallet, Bee, and spend opt-in flags.
+4. Expand the opt-in Ollama local inference pilot with field support checks, rejection behavior, streaming conformance, and additional model engines.
+5. Expand Swarm RAG One with live embedding backends, browser file selection, richer file parsing, and OpenAI file-search compatibility behavior.
+6. Continue contract alignment for generic extensions and production marketplace operations beyond the local V2 interface objects.
+7. Add production readiness gates for labels, fixtures, operational evidence, and documentation freshness.
 
 This ordering is intentional: visibility first, then one real storage path, one real model path, one real data workflow, and then broader economic and routing hardening.

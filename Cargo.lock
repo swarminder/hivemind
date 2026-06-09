@@ -1468,6 +1468,7 @@ dependencies = [
  "hivemind-vector",
  "hivemind-weeb3-adapter",
  "hivemind-workflow",
+ "reqwest",
  "schemars",
  "serde",
  "serde_json",

@@ -12214,13 +12214,14 @@ mod tests {
         receipt.receipt_id = canonical_receipt_id(&receipt).unwrap();
         hivemind_receipts::write_receipt(&receipt_dir, &receipt).unwrap();
 
+        let quotes = quotes_for_job_order(&order);
         let mut record =
             hivemind_jobs::job_record_from_order(order.clone(), "2026-06-02T00:00:00Z");
         record.status = hivemind_jobs::JobRecordStatusV1::Succeeded;
         record.receipt_id = Some(receipt.receipt_id.clone());
         record.receipt_ref = Some(format!("local://receipt/{}", receipt.receipt_id));
         record.runner_id = Some("local-dev-runner".to_string());
-        record.quotes = quotes_for_job_order(&order);
+        record.quotes = quotes.clone();
         record.metadata["settlement"] = json!({
             "settlementId": "settlement-index-1",
             "settlementRef": "local://settlements/settlement-index-1",
@@ -12235,10 +12236,7 @@ mod tests {
         let entry = &summary.receipts[0];
         assert_eq!(entry.job_id.as_deref(), Some(order.job_id.as_str()));
         assert_eq!(entry.requester.as_deref(), Some("api-requester"));
-        assert_eq!(
-            entry.quote_id.as_deref(),
-            Some(quotes_for_job_order(&order)[0].quote_id.as_str())
-        );
+        assert_eq!(entry.quote_id.as_deref(), Some(quotes[0].quote_id.as_str()));
         assert_eq!(
             entry.settlement_ref.as_deref(),
             Some("local://settlements/settlement-index-1")
@@ -12255,7 +12253,7 @@ mod tests {
         free_local_record.lease = Some(
             hivemind_core::execution_lease_from_quote(
                 &order,
-                &quotes_for_job_order(&order)[0],
+                &quotes[0],
                 "api-requester",
                 "local://settlement/free-local-dev",
                 "2030-06-02T00:00:00Z",
