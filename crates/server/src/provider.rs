@@ -19,7 +19,8 @@ use hivemind_core::{
     PseudoPaymentPolicyV1, PseudoPaymentSessionV1, PseudoPaymentStateV1, SignedRequestEnvelopeV1,
     UsageConfidence, apply_pseudo_payment_debit, apply_pseudo_payment_forgiveness,
     apply_pseudo_payment_session_close, hash_canonical_json, provider_chat_usage_cost,
-    provider_security_mode_allows_bind, pseudo_payment_state, validate_signed_request_envelope,
+    provider_security_mode_allows_bind, pseudo_payment_state, validate_provider_quote,
+    validate_signed_request_envelope,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -88,6 +89,7 @@ struct ProviderState {
     require_signed_requests: bool,
     state_path: Arc<PathBuf>,
     signed_request_nonces: Arc<Mutex<BTreeMap<String, DateTime<Utc>>>>,
+    quotes: Arc<Mutex<BTreeMap<String, ProviderQuoteV1>>>,
     sessions: Arc<Mutex<BTreeMap<String, StoredProviderSession>>>,
     receipts: Arc<Mutex<BTreeMap<String, ProviderChatReceiptV1>>>,
     model_lifecycle: Arc<Mutex<StoredProviderModelLifecycle>>,
@@ -147,6 +149,8 @@ struct ProviderStateSnapshot {
     #[serde(rename = "storedAt")]
     stored_at: DateTime<Utc>,
     #[serde(default)]
+    quotes: BTreeMap<String, ProviderQuoteV1>,
+    #[serde(default)]
     sessions: BTreeMap<String, StoredProviderSession>,
     #[serde(default)]
     receipts: BTreeMap<String, ProviderChatReceiptV1>,
@@ -156,6 +160,7 @@ struct ProviderStateSnapshot {
 
 #[derive(Debug, Clone, Default)]
 struct LoadedProviderState {
+    quotes: BTreeMap<String, ProviderQuoteV1>,
     sessions: BTreeMap<String, StoredProviderSession>,
     receipts: BTreeMap<String, ProviderChatReceiptV1>,
     model_lifecycle: Option<StoredProviderModelLifecycle>,
@@ -638,6 +643,7 @@ fn provider_state_from_config(config: ServeProviderConfig) -> Result<ProviderSta
         require_signed_requests: config.require_signed_requests,
         state_path: Arc::new(config.state_path),
         signed_request_nonces: Arc::new(Mutex::new(BTreeMap::new())),
+        quotes: Arc::new(Mutex::new(loaded_provider_state.quotes)),
         sessions: Arc::new(Mutex::new(loaded_provider_state.sessions)),
         receipts: Arc::new(Mutex::new(loaded_provider_state.receipts)),
         model_lifecycle: Arc::new(Mutex::new(model_lifecycle)),
@@ -760,6 +766,23 @@ fn load_provider_state(
         return Ok(LoadedProviderState::default());
     }
 
+    let now = Utc::now();
+    let mut quotes = BTreeMap::new();
+    for (quote_id, quote) in snapshot.quotes {
+        if quote.quote_id != quote_id
+            || quote.provider_id != provider_id
+            || quote.model_id != model_id
+            || quote.expires_at <= now
+        {
+            warn!(
+                "skipping inconsistent or expired persisted provider quote {} from {}",
+                quote_id,
+                state_path.display()
+            );
+            continue;
+        }
+        quotes.insert(quote_id, quote);
+    }
     let mut sessions = BTreeMap::new();
     for (session_id, stored) in snapshot.sessions {
         if stored.provider_session.session_id != session_id
@@ -793,6 +816,7 @@ fn load_provider_state(
         receipts.insert(receipt_id, receipt);
     }
     Ok(LoadedProviderState {
+        quotes,
         sessions,
         receipts,
         model_lifecycle: snapshot.model_lifecycle,
@@ -804,11 +828,13 @@ async fn persist_provider_state(state: &ProviderState) -> Result<(), ProviderApi
         let sessions = lock_sessions(state)?.clone();
         let receipts = lock_receipts(state)?.clone();
         let model_lifecycle = Some(lock_model_lifecycle(state)?.clone());
+        let quotes = unexpired_quotes_snapshot(state, Utc::now())?;
         ProviderStateSnapshot {
             schema_version: PROVIDER_STATE_SCHEMA_VERSION.to_string(),
             provider_id: state.identity.provider_id.clone(),
             model_id: state.offer.model_id.clone(),
             stored_at: Utc::now(),
+            quotes,
             sessions,
             receipts,
             model_lifecycle,
@@ -1332,6 +1358,7 @@ async fn provider_quote(
             "mock provider MVP currently requires pseudopayment debt forgiveness",
         ));
     }
+    let now = Utc::now();
     let quote = ProviderQuoteV1 {
         schema_version: hivemind_core::PROVIDER_QUOTE_SCHEMA_VERSION.to_string(),
         quote_id: format!("provider-quote-{}", Uuid::new_v4()),
@@ -1355,13 +1382,102 @@ async fn provider_quote(
             max_input_tokens: state.offer.max_context_tokens,
             max_output_tokens: state.offer.max_output_tokens,
         },
-        expires_at: Utc::now() + Duration::minutes(5),
+        expires_at: now + Duration::minutes(5),
         signature: Some(format!(
             "dev-provider-quote-signature-v1:{}",
             state.identity.provider_id
         )),
     };
+    {
+        let mut quotes = lock_quotes(&state)?;
+        quotes.retain(|_, quote| quote.expires_at > now);
+        quotes.insert(quote.quote_id.clone(), quote.clone());
+    }
+    persist_provider_state(&state).await?;
     Ok(Json(quote))
+}
+
+fn claim_provider_quote_for_session(
+    state: &ProviderState,
+    request: &ProviderSessionOpenRequestV1,
+    now: DateTime<Utc>,
+) -> Result<ProviderQuoteV1, ProviderApiError> {
+    let mut quotes = lock_quotes(state)?;
+    let Some(quote) = quotes.get(&request.quote_id).cloned() else {
+        return Err(ProviderApiError::new(
+            StatusCode::NOT_FOUND,
+            "quote_not_found",
+            "provider session request quoteId was not issued by this provider",
+        ));
+    };
+    if quote.expires_at <= now {
+        quotes.remove(&request.quote_id);
+        return Err(ProviderApiError::new(
+            StatusCode::BAD_REQUEST,
+            "quote_expired",
+            "provider quote has expired",
+        ));
+    }
+    let issues = validate_provider_quote(&quote, now);
+    if let Some(issue) = issues.first() {
+        return Err(ProviderApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "provider_quote_invalid",
+            format!(
+                "stored provider quote is invalid: {} {}",
+                issue.path, issue.message
+            ),
+        ));
+    }
+    if quote.provider_id != state.identity.provider_id || request.provider_id != quote.provider_id {
+        return Err(ProviderApiError::new(
+            StatusCode::BAD_REQUEST,
+            "provider_mismatch",
+            "session request providerId does not match the issued quote",
+        ));
+    }
+    if quote.consumer_id != request.consumer_id {
+        return Err(ProviderApiError::new(
+            StatusCode::FORBIDDEN,
+            "consumer_mismatch",
+            "session request consumerId does not match the issued quote",
+        ));
+    }
+    if quote.model_id != state.offer.model_id {
+        return Err(ProviderApiError::new(
+            StatusCode::BAD_REQUEST,
+            "model_mismatch",
+            "issued quote modelId does not match this provider model",
+        ));
+    }
+    let expected_policy_hash = provider_quote_policy_hash(&quote)?;
+    if request.accepted_policy_hash != expected_policy_hash {
+        return Err(ProviderApiError::new(
+            StatusCode::BAD_REQUEST,
+            "policy_hash_mismatch",
+            "session request acceptedPolicyHash does not match the issued quote policy",
+        ));
+    }
+    if request.spending_cap < 0.0 || request.spending_cap > quote.pseudopayment_policy.max_debt {
+        return Err(ProviderApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_spending_cap",
+            "spendingCap must be between zero and issued quote maxDebt",
+        ));
+    }
+    quotes.remove(&request.quote_id);
+    Ok(quote)
+}
+
+fn provider_quote_policy_hash(quote: &ProviderQuoteV1) -> Result<String, ProviderApiError> {
+    let policy_value = serde_json::to_value(&quote.pseudopayment_policy).map_err(|error| {
+        ProviderApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "provider_quote_policy_hash_failed",
+            format!("issued quote policy could not be serialized: {error}"),
+        )
+    })?;
+    Ok(hash_canonical_json(&policy_value))
 }
 
 async fn provider_open_session(
@@ -1387,13 +1503,6 @@ async fn provider_open_session(
             "session request providerId does not match this provider",
         ));
     }
-    if request.spending_cap < 0.0 || request.spending_cap > state.policy.max_debt {
-        return Err(ProviderApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_spending_cap",
-            "spendingCap must be between zero and provider policy maxDebt",
-        ));
-    }
     let now = Utc::now();
     if request.requested_expires_at <= now {
         return Err(ProviderApiError::new(
@@ -1402,6 +1511,7 @@ async fn provider_open_session(
             "requestedExpiresAt must be in the future",
         ));
     }
+    let quote = claim_provider_quote_for_session(&state, &request, now)?;
     {
         let mut sessions = lock_sessions(&state)?;
         refresh_all_session_states(&mut sessions, &state.policy, now)?;
@@ -1417,16 +1527,16 @@ async fn provider_open_session(
             ));
         }
     }
-    let expires_at = request
-        .requested_expires_at
-        .min(now + Duration::seconds(state.policy.max_session_duration_seconds as i64));
+    let expires_at = request.requested_expires_at.min(
+        now + Duration::seconds(quote.pseudopayment_policy.max_session_duration_seconds as i64),
+    );
     let session_id = format!("provider-session-{}", Uuid::new_v4());
     let payment_session = PseudoPaymentSessionV1 {
         schema_version: hivemind_core::PSEUDO_PAYMENT_SESSION_SCHEMA_VERSION.to_string(),
         session_id: session_id.clone(),
         provider_id: state.identity.provider_id.clone(),
         consumer_id: request.consumer_id.clone(),
-        quote_id: request.quote_id.clone(),
+        quote_id: quote.quote_id.clone(),
         policy_hash: request.accepted_policy_hash.clone(),
         current_debt: 0.0,
         last_forgiveness_at: now,
@@ -1435,15 +1545,15 @@ async fn provider_open_session(
         opened_at: now,
         expires_at,
     };
-    let ledger_state =
-        pseudo_payment_state(&payment_session, &state.policy, now).map_err(payment_error)?;
+    let ledger_state = pseudo_payment_state(&payment_session, &quote.pseudopayment_policy, now)
+        .map_err(payment_error)?;
     let provider_session = ProviderSessionV1 {
         schema_version: hivemind_core::PROVIDER_SESSION_SCHEMA_VERSION.to_string(),
         session_id: session_id.clone(),
-        quote_id: request.quote_id,
+        quote_id: quote.quote_id.clone(),
         provider_id: state.identity.provider_id.clone(),
         consumer_id: request.consumer_id.clone(),
-        model_id: state.offer.model_id.clone(),
+        model_id: quote.model_id.clone(),
         status: ProviderSessionStatus::Active,
         payment_mode: ProviderPaymentMode::PseudopaymentDebtForgiveness,
         policy_hash: request.accepted_policy_hash,
@@ -2864,6 +2974,27 @@ fn lock_sessions(
     })
 }
 
+fn lock_quotes(
+    state: &ProviderState,
+) -> Result<MutexGuard<'_, BTreeMap<String, ProviderQuoteV1>>, ProviderApiError> {
+    state.quotes.lock().map_err(|_| {
+        ProviderApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "provider_state_poisoned",
+            "provider quote state could not be locked",
+        )
+    })
+}
+
+fn unexpired_quotes_snapshot(
+    state: &ProviderState,
+    now: DateTime<Utc>,
+) -> Result<BTreeMap<String, ProviderQuoteV1>, ProviderApiError> {
+    let mut quotes = lock_quotes(state)?;
+    quotes.retain(|_, quote| quote.expires_at > now);
+    Ok(quotes.clone())
+}
+
 fn lock_receipts(
     state: &ProviderState,
 ) -> Result<MutexGuard<'_, BTreeMap<String, ProviderChatReceiptV1>>, ProviderApiError> {
@@ -3207,17 +3338,51 @@ mod tests {
     }
 
     fn session_open_request(state: &ProviderState) -> ProviderSessionOpenRequestV1 {
+        let quote = issued_quote(state, Utc::now() + Duration::minutes(5));
+        let accepted_policy_hash = provider_quote_policy_hash(&quote).unwrap();
+        lock_quotes(state)
+            .unwrap()
+            .insert(quote.quote_id.clone(), quote.clone());
         ProviderSessionOpenRequestV1 {
             schema_version: hivemind_core::PROVIDER_SESSION_OPEN_REQUEST_SCHEMA_VERSION.to_string(),
             request_id: "open-1".to_string(),
-            quote_id: "quote-1".to_string(),
+            quote_id: quote.quote_id,
             consumer_id: "consumer-1".to_string(),
             provider_id: state.identity.provider_id.clone(),
-            accepted_policy_hash: "policy-hash-1".to_string(),
+            accepted_policy_hash,
             spending_cap: 10.0,
             requested_expires_at: Utc::now() + Duration::minutes(5),
             auth_proof: None,
             request_envelope: None,
+            signature: None,
+        }
+    }
+
+    fn issued_quote(state: &ProviderState, expires_at: DateTime<Utc>) -> ProviderQuoteV1 {
+        ProviderQuoteV1 {
+            schema_version: hivemind_core::PROVIDER_QUOTE_SCHEMA_VERSION.to_string(),
+            quote_id: format!("quote-{}", Uuid::new_v4()),
+            request_id: format!("quote-request-{}", Uuid::new_v4()),
+            provider_id: state.identity.provider_id.clone(),
+            consumer_id: "consumer-1".to_string(),
+            model_id: state.offer.model_id.clone(),
+            price_terms: ProviderPriceTermsV1 {
+                currency_unit: state.policy.currency_unit.clone(),
+                price_per_input_token: state.policy.price_per_input_token,
+                price_per_output_token: state.policy.price_per_output_token,
+                price_per_model_second: state.policy.price_per_model_second,
+                price_per_request: state.policy.price_per_request,
+            },
+            pseudopayment_policy: state.policy.clone(),
+            cold_start_policy: state.offer.cold_start_policy.clone(),
+            limits: ProviderSessionLimitsV1 {
+                max_session_duration_seconds: state.policy.max_session_duration_seconds,
+                max_jobs_per_minute: state.policy.max_jobs_per_minute,
+                max_concurrent_jobs: state.policy.max_concurrent_jobs,
+                max_input_tokens: state.offer.max_context_tokens,
+                max_output_tokens: state.offer.max_output_tokens,
+            },
+            expires_at,
             signature: None,
         }
     }
@@ -3635,6 +3800,287 @@ mod tests {
         assert_eq!(sessions[&open.session.session_id].ledger.len(), 1);
         drop(sessions);
         assert!(lock_receipts(&state).unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn provider_chat_backend_unavailable_does_not_debit_or_receipt() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let backend_addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        let mut config = config();
+        config.backend_type = ModelBackendType::OpenAiCompatibleHttp;
+        config.backend_base_url = Some(format!("http://{backend_addr}/v1"));
+        config.backend_timeout_seconds = 1;
+        config.initial_model_state = Some(ModelLifecycleStateKind::Ready);
+        let state = provider_state_from_config(config).unwrap();
+        let open = provider_open_session(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(session_open_request(&state)),
+        )
+        .await
+        .unwrap()
+        .0;
+        let opened_ledger_state = open.session.current_ledger_state.clone();
+        let mut request = chat_request(&state);
+        request.session_id = open.session.session_id.clone();
+
+        let error = provider_chat(State(state.clone()), HeaderMap::new(), Json(request))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, "backend_unavailable");
+        let sessions = lock_sessions(&state).unwrap();
+        let stored = &sessions[&open.session.session_id];
+        assert_eq!(stored.ledger.len(), 1);
+        assert_eq!(
+            stored.provider_session.current_ledger_state.current_debt,
+            opened_ledger_state.current_debt
+        );
+        assert_eq!(
+            stored
+                .provider_session
+                .current_ledger_state
+                .last_event_sequence,
+            opened_ledger_state.last_event_sequence
+        );
+        drop(sessions);
+        assert!(lock_receipts(&state).unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn provider_chat_debits_usage_cost_and_links_receipt() {
+        let state = provider_state_from_config(config()).unwrap();
+        let open = provider_open_session(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(session_open_request(&state)),
+        )
+        .await
+        .unwrap()
+        .0;
+        let mut request = chat_request(&state);
+        request.session_id = open.session.session_id.clone();
+        let job_id = request.job_id.clone();
+
+        let chat = provider_chat(State(state.clone()), HeaderMap::new(), Json(request))
+            .await
+            .unwrap()
+            .0;
+
+        let expected_cost = provider_chat_usage_cost(&state.policy, &chat.receipt.usage);
+        assert_eq!(chat.receipt.cost, expected_cost);
+        let sessions = lock_sessions(&state).unwrap();
+        let stored = &sessions[&open.session.session_id];
+        assert_eq!(stored.ledger.len(), 2);
+        let debit_event = stored.ledger.last().unwrap();
+        assert_eq!(debit_event.event_type, PseudoLedgerEventType::DebitApplied);
+        assert_eq!(debit_event.job_id.as_deref(), Some(job_id.as_str()));
+        assert_eq!(
+            debit_event.receipt_id.as_deref(),
+            Some(chat.receipt.receipt_id.as_str())
+        );
+        assert_eq!(debit_event.amount, chat.receipt.cost);
+        assert_eq!(
+            debit_event.debt_before + chat.receipt.cost,
+            debit_event.debt_after
+        );
+        assert_eq!(
+            stored.provider_session.current_ledger_state.current_debt,
+            debit_event.debt_after
+        );
+        assert!(
+            chat.receipt
+                .ledger_event_ids
+                .contains(&debit_event.event_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_chat_resumes_after_debt_forgiveness() {
+        let mut config = config();
+        config.forgiveness_per_second = 1_000_000.0;
+        let state = provider_state_from_config(config).unwrap();
+        let open = provider_open_session(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(session_open_request(&state)),
+        )
+        .await
+        .unwrap()
+        .0;
+        let ceiling_at = Utc::now();
+        {
+            let mut sessions = lock_sessions(&state).unwrap();
+            let stored = sessions.get_mut(&open.session.session_id).unwrap();
+            let ceiling_event = apply_pseudo_payment_debit(
+                &mut stored.payment_session,
+                &state.policy,
+                state.policy.max_debt,
+                Some("setup-job".to_string()),
+                None,
+                ceiling_at,
+                state.identity.provider_id.clone(),
+            )
+            .unwrap();
+            stored.payment_session.last_forgiveness_at = Utc::now() + Duration::seconds(60);
+            stored.ledger.push(ceiling_event);
+            stored.provider_session.current_ledger_state =
+                pseudo_payment_state(&stored.payment_session, &state.policy, ceiling_at).unwrap();
+        }
+
+        let mut blocked_request = chat_request(&state);
+        blocked_request.session_id = open.session.session_id.clone();
+        let error = provider_chat(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(blocked_request),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code, "debt_ceiling_exceeded");
+        assert!(lock_receipts(&state).unwrap().is_empty());
+
+        {
+            let mut sessions = lock_sessions(&state).unwrap();
+            let stored = sessions.get_mut(&open.session.session_id).unwrap();
+            stored.payment_session.last_forgiveness_at = state.policy.forgiveness_starts_at;
+        }
+        sleep(StdDuration::from_millis(5)).await;
+        let mut resumed_request = chat_request(&state);
+        resumed_request.job_id = "job-after-forgiveness".to_string();
+        resumed_request.session_id = open.session.session_id.clone();
+
+        let chat = provider_chat(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(resumed_request),
+        )
+        .await
+        .unwrap()
+        .0;
+
+        assert_eq!(chat.receipt.session_id, open.session.session_id);
+        let sessions = lock_sessions(&state).unwrap();
+        let stored = &sessions[&open.session.session_id];
+        assert!(
+            stored
+                .ledger
+                .iter()
+                .any(|event| event.event_type == PseudoLedgerEventType::ForgivenessApplied)
+        );
+        assert!(stored.ledger.iter().any(|event| {
+            event.event_type == PseudoLedgerEventType::DebitApplied
+                && event.receipt_id.as_deref() == Some(chat.receipt.receipt_id.as_str())
+        }));
+    }
+
+    #[tokio::test]
+    async fn provider_quote_stores_issued_quote_for_session_open() {
+        let config = config();
+        let state = provider_state_from_config(config.clone()).unwrap();
+
+        let quote = provider_quote(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(quote_request(&state)),
+        )
+        .await
+        .unwrap()
+        .0;
+
+        assert!(lock_quotes(&state).unwrap().contains_key(&quote.quote_id));
+        let reloaded = provider_state_from_config(config).unwrap();
+        assert!(
+            lock_quotes(&reloaded)
+                .unwrap()
+                .contains_key(&quote.quote_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_open_session_rejects_unknown_quote() {
+        let state = provider_state_from_config(config()).unwrap();
+        let request = ProviderSessionOpenRequestV1 {
+            schema_version: hivemind_core::PROVIDER_SESSION_OPEN_REQUEST_SCHEMA_VERSION.to_string(),
+            request_id: "open-missing-quote".to_string(),
+            quote_id: "missing-quote".to_string(),
+            consumer_id: "consumer-1".to_string(),
+            provider_id: state.identity.provider_id.clone(),
+            accepted_policy_hash: "policy-hash-1".to_string(),
+            spending_cap: 10.0,
+            requested_expires_at: Utc::now() + Duration::minutes(5),
+            auth_proof: None,
+            request_envelope: None,
+            signature: None,
+        };
+
+        let error = provider_open_session(State(state), HeaderMap::new(), Json(request))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, "quote_not_found");
+    }
+
+    #[tokio::test]
+    async fn provider_open_session_rejects_expired_quote() {
+        let state = provider_state_from_config(config()).unwrap();
+        let quote = issued_quote(&state, Utc::now() - Duration::minutes(1));
+        let accepted_policy_hash = provider_quote_policy_hash(&quote).unwrap();
+        let quote_id = quote.quote_id.clone();
+        lock_quotes(&state)
+            .unwrap()
+            .insert(quote.quote_id.clone(), quote);
+        let request = ProviderSessionOpenRequestV1 {
+            schema_version: hivemind_core::PROVIDER_SESSION_OPEN_REQUEST_SCHEMA_VERSION.to_string(),
+            request_id: "open-expired-quote".to_string(),
+            quote_id: quote_id.clone(),
+            consumer_id: "consumer-1".to_string(),
+            provider_id: state.identity.provider_id.clone(),
+            accepted_policy_hash,
+            spending_cap: 10.0,
+            requested_expires_at: Utc::now() + Duration::minutes(5),
+            auth_proof: None,
+            request_envelope: None,
+            signature: None,
+        };
+
+        let error = provider_open_session(State(state.clone()), HeaderMap::new(), Json(request))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, "quote_expired");
+        assert!(!lock_quotes(&state).unwrap().contains_key(&quote_id));
+    }
+
+    #[tokio::test]
+    async fn provider_open_session_rejects_policy_hash_mismatch_without_consuming_quote() {
+        let state = provider_state_from_config(config()).unwrap();
+        let mut request = session_open_request(&state);
+        let quote_id = request.quote_id.clone();
+        request.accepted_policy_hash = "wrong-policy-hash".to_string();
+
+        let error = provider_open_session(State(state.clone()), HeaderMap::new(), Json(request))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, "policy_hash_mismatch");
+        assert!(lock_quotes(&state).unwrap().contains_key(&quote_id));
+    }
+
+    #[tokio::test]
+    async fn provider_open_session_consumes_issued_quote() {
+        let state = provider_state_from_config(config()).unwrap();
+        let request = session_open_request(&state);
+        let quote_id = request.quote_id.clone();
+
+        let _ = provider_open_session(State(state.clone()), HeaderMap::new(), Json(request))
+            .await
+            .unwrap();
+
+        assert!(!lock_quotes(&state).unwrap().contains_key(&quote_id));
     }
 
     #[test]

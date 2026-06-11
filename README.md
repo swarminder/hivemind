@@ -134,8 +134,11 @@ Run the direct provider/consumer pilot with a mock backend:
 cargo run -p hivemind-server -- serve-provider --config .\examples\provider\mock-provider.json
 
 # Terminal 2
+cargo run -p hivemind-server -- provider-check --config .\examples\consumer\local-chat.json
 cargo run -p hivemind-server -- provider-chat --config .\examples\consumer\local-chat.json --message "hello provider"
 ```
+
+For the fuller runbook, see [docs/provider-consumer/quickstart.md](docs/provider-consumer/quickstart.md). A LAN test template is available at `examples/provider/lan-mock-provider.json` and pairs with `examples/consumer/lan-chat.json`.
 
 Resume the same provider session after a provider restart:
 
@@ -143,7 +146,13 @@ Resume the same provider session after a provider restart:
 cargo run -p hivemind-server -- provider-chat --provider http://127.0.0.1:8788 --resume-session-id <provider-session-id> --message "continue"
 ```
 
-Provider mode refuses unsafe external serving unless an explicit security mode and auth policy are configured. It supports bearer-token LAN auth and an MVP local-dev signed request envelope mode with body-hash, expiry, and nonce replay checks. Pseudopayment is local-dev/test accounting: usage increases session debt, forgiveness lowers it over time, and the provider can refuse work when the debt ceiling is reached. Provider model lifecycle, sessions, issued receipts, and final closed-session summaries survive restart through the configured state file and can be queried through the provider API; `provider-chat --close-session` also stores that final summary locally. For OpenAI-compatible backends, the provider can optionally start and stop an operator-configured managed process without shell interpolation; stop is refused while jobs are active and is not exposed for unmanaged external backends. It is not real settlement or production custody.
+Send a cancellation request for an existing provider job in a resumed session:
+
+```powershell
+cargo run -p hivemind-server -- provider-chat --provider http://127.0.0.1:8788 --resume-session-id <provider-session-id> --cancel-job-id <provider-job-id>
+```
+
+Provider mode refuses unsafe external serving unless an explicit security mode and auth policy are configured. It supports bearer-token LAN auth and an MVP local-dev signed request envelope mode with body-hash, expiry, and nonce replay checks. Pseudopayment is local-dev/test accounting: usage increases session debt, forgiveness lowers it over time, and the provider can refuse work when the debt ceiling is reached, then accept work again after enough forgiveness restores capacity. Successful chat receipts link to the debit ledger event whose amount equals the receipt cost. `provider-chat` prints price terms and session warnings for local-dev security, unauthenticated modes, LAN HTTP transport, plaintext privacy tiers, cold model state, and test-accounting settlement limits. Provider model lifecycle, issued quotes, sessions, issued receipts, and final closed-session summaries survive restart through the configured state file; session open requires an unexpired provider-issued quote and matching accepted policy hash. `provider-chat --close-session` also stores that final summary locally. On resume, `provider-chat` fetches the provider ledger, warns when the provider is ahead of local state, and refuses unsafe divergent local state such as missing provider receipts or a local ledger sequence ahead of the provider. `provider-chat` renders token deltas from returned provider stream events and validates the terminal receipt event, but true live streaming transport is still future work. Provider job cancellation is currently a control-plane request for a known `jobId`; it reports whether the job is active and updates the local ledger view without creating debt or receipts for inactive jobs. OpenAI-compatible backend outages return `backend_unavailable` without issuing receipts or applying chat debits. For OpenAI-compatible backends, the provider can optionally start and stop an operator-configured managed process without shell interpolation; stop is refused while jobs are active and is not exposed for unmanaged external backends. It is not real settlement or production custody.
 
 Start the local API and dashboard:
 

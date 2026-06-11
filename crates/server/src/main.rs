@@ -1065,6 +1065,19 @@ enum Commands {
         #[arg(long)]
         initial_model_state: Option<String>,
     },
+    /// Check provider health, capabilities, selected model status, and warnings.
+    ProviderCheck {
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long = "provider")]
+        provider_url: Option<String>,
+        #[arg(long, env = "HIVEMIND_PROVIDER_BEARER_TOKEN")]
+        bearer_token: Option<String>,
+        #[arg(long)]
+        model_id: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Connect to a provider URL, open a pseudopayment session, and chat.
     ProviderChat {
         #[arg(long)]
@@ -1095,6 +1108,8 @@ enum Commands {
         session_summaries_dir: Option<PathBuf>,
         #[arg(long)]
         resume_session_id: Option<String>,
+        #[arg(long)]
+        cancel_job_id: Option<String>,
         #[arg(long)]
         sign_requests: bool,
         #[arg(long)]
@@ -1158,6 +1173,7 @@ struct ProviderChatFileConfig {
     session_state_dir: Option<PathBuf>,
     session_summaries_dir: Option<PathBuf>,
     resume_session_id: Option<String>,
+    cancel_job_id: Option<String>,
     sign_requests: Option<bool>,
     show_events: Option<bool>,
     close_session: Option<bool>,
@@ -4225,6 +4241,36 @@ async fn async_main() -> Result<()> {
             }
             provider::serve(provider_config).await
         }
+        Commands::ProviderCheck {
+            config,
+            provider_url,
+            bearer_token,
+            model_id,
+            json,
+        } => {
+            let mut check_config = default_provider_chat_config();
+            if let Some(path) = config.as_deref() {
+                let file_config: ProviderChatFileConfig =
+                    load_json_config(path, "consumer config")?;
+                apply_provider_chat_file_config(&mut check_config, file_config);
+            }
+            if let Some(value) = provider_url {
+                check_config.provider_url = value;
+            }
+            if let Some(value) = bearer_token {
+                check_config.bearer_token = Some(value);
+            }
+            if let Some(value) = model_id {
+                check_config.model_id = Some(value);
+            }
+            consumer::check(consumer::ProviderCheckConfig {
+                provider_url: check_config.provider_url,
+                bearer_token: check_config.bearer_token,
+                model_id: check_config.model_id,
+                json,
+            })
+            .await
+        }
         Commands::ProviderChat {
             config,
             provider_url,
@@ -4240,6 +4286,7 @@ async fn async_main() -> Result<()> {
             session_state_dir,
             session_summaries_dir,
             resume_session_id,
+            cancel_job_id,
             sign_requests,
             show_events,
             close_session,
@@ -4288,6 +4335,9 @@ async fn async_main() -> Result<()> {
             }
             if let Some(value) = resume_session_id {
                 chat_config.resume_session_id = Some(value);
+            }
+            if let Some(value) = cancel_job_id {
+                chat_config.cancel_job_id = Some(value);
             }
             if sign_requests {
                 chat_config.sign_requests = true;
@@ -4356,6 +4406,7 @@ fn default_provider_chat_config() -> consumer::ProviderChatConfig {
         session_state_dir: PathBuf::from(".swarm-ai-cache/provider-consumer/sessions"),
         session_summaries_dir: PathBuf::from(".swarm-ai-cache/provider-consumer/summaries"),
         resume_session_id: None,
+        cancel_job_id: None,
         sign_requests: false,
         show_events: false,
         close_session: false,
@@ -4518,6 +4569,9 @@ fn apply_provider_chat_file_config(
     if let Some(value) = file.resume_session_id {
         config.resume_session_id = Some(value);
     }
+    if let Some(value) = file.cancel_job_id {
+        config.cancel_job_id = Some(value);
+    }
     if let Some(value) = file.sign_requests {
         config.sign_requests = value;
     }
@@ -4532,6 +4586,16 @@ fn apply_provider_chat_file_config(
 #[cfg(test)]
 mod provider_consumer_config_tests {
     use super::*;
+
+    fn workspace_path(parts: &[&str]) -> PathBuf {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.pop();
+        for part in parts {
+            path.push(part);
+        }
+        path
+    }
 
     #[test]
     fn provider_file_config_merges_lan_managed_backend() {
@@ -4595,6 +4659,7 @@ mod provider_consumer_config_tests {
             "sessionStateDir": ".swarm-ai-cache/test-sessions",
             "sessionSummariesDir": ".swarm-ai-cache/test-summaries",
             "resumeSessionId": "session-1",
+            "cancelJobId": "job-1",
             "signRequests": true,
             "showEvents": true,
             "closeSession": true
@@ -4626,6 +4691,7 @@ mod provider_consumer_config_tests {
             PathBuf::from(".swarm-ai-cache/test-summaries")
         );
         assert_eq!(config.resume_session_id.as_deref(), Some("session-1"));
+        assert_eq!(config.cancel_job_id.as_deref(), Some("job-1"));
         assert!(config.sign_requests);
         assert!(config.show_events);
         assert!(config.close_session);
@@ -4646,6 +4712,106 @@ mod provider_consumer_config_tests {
             loaded.provider_url.as_deref(),
             Some("http://127.0.0.1:8788")
         );
+    }
+
+    #[test]
+    fn checked_in_provider_examples_load() {
+        let examples = [
+            (
+                "mock-provider.json",
+                hivemind_core::ProviderSecurityMode::LocalDev,
+                hivemind_core::ModelBackendType::Mock,
+                None,
+                "mock-chat",
+            ),
+            (
+                "lan-mock-provider.json",
+                hivemind_core::ProviderSecurityMode::LanTest,
+                hivemind_core::ModelBackendType::Mock,
+                Some("replace-with-a-shared-test-token"),
+                "mock-chat",
+            ),
+            (
+                "openai-compatible-external-provider.json",
+                hivemind_core::ProviderSecurityMode::LocalDev,
+                hivemind_core::ModelBackendType::OpenAiCompatibleHttp,
+                None,
+                "local-llama",
+            ),
+            (
+                "openai-compatible-managed-provider.json",
+                hivemind_core::ProviderSecurityMode::LocalDev,
+                hivemind_core::ModelBackendType::OpenAiCompatibleHttp,
+                None,
+                "local-llama",
+            ),
+        ];
+
+        for (file_name, security_mode, backend_type, bearer_token, model_id) in examples {
+            let path = workspace_path(&["examples", "provider", file_name]);
+            let file: ServeProviderFileConfig =
+                load_json_config(&path, "provider example").unwrap();
+            let mut config = default_serve_provider_config();
+
+            apply_serve_provider_file_config(&mut config, file).unwrap();
+
+            assert_eq!(config.security_mode, security_mode, "{file_name}");
+            assert_eq!(config.backend_type, backend_type, "{file_name}");
+            assert_eq!(config.bearer_token.as_deref(), bearer_token, "{file_name}");
+            assert_eq!(config.model_id, model_id, "{file_name}");
+            assert!(config.max_debt > 0.0, "{file_name}");
+            assert!(config.max_concurrent_jobs > 0, "{file_name}");
+        }
+    }
+
+    #[test]
+    fn checked_in_consumer_examples_load() {
+        let examples = [
+            (
+                "local-chat.json",
+                "http://127.0.0.1:8788",
+                None,
+                "consumer-local",
+            ),
+            (
+                "lan-chat.json",
+                "http://replace-with-provider-lan-ip:8788",
+                Some("replace-with-a-shared-test-token"),
+                "consumer-lan",
+            ),
+        ];
+
+        for (file_name, provider_url, bearer_token, consumer_id) in examples {
+            let path = workspace_path(&["examples", "consumer", file_name]);
+            let file: ProviderChatFileConfig = load_json_config(&path, "consumer example").unwrap();
+            let mut config = default_provider_chat_config();
+
+            apply_provider_chat_file_config(&mut config, file);
+
+            assert_eq!(config.provider_url, provider_url, "{file_name}");
+            assert_eq!(config.bearer_token.as_deref(), bearer_token, "{file_name}");
+            assert_eq!(config.consumer_id, consumer_id, "{file_name}");
+            assert!(config.expected_max_input_tokens > 0, "{file_name}");
+            assert!(config.expected_max_output_tokens > 0, "{file_name}");
+            assert!(config.max_output_tokens > 0, "{file_name}");
+        }
+    }
+
+    #[test]
+    fn provider_consumer_docs_exist() {
+        for file_name in [
+            "quickstart.md",
+            "provider-setup.md",
+            "consumer-chat.md",
+            "pseudopayments.md",
+            "security.md",
+            "backend-adapters.md",
+            "lan-demo.md",
+            "troubleshooting.md",
+        ] {
+            let path = workspace_path(&["docs", "provider-consumer", file_name]);
+            assert!(path.exists(), "missing {}", path.display());
+        }
     }
 }
 
